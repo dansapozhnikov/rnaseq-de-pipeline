@@ -24,10 +24,12 @@
 #' @param force If TRUE, downgrade QC FAIL -> WARN and continue.
 #' @return list(qc, de, dds, report) — used by the airway validation to assert.
 run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
-                              sample_col = "sample", tx2gene = NULL, force = FALSE) {
+                              sample_col = "sample", tx2gene = NULL, force = FALSE,
+                              pipeline_version = "dev") {
   # Determinism: fix the seed before any stochastic step (shrinkage, plotting).
   set.seed(cfg$seed)
   tested <- cfg$contrast[[1]]
+  t0 <- Sys.time()   # wall-clock start, for the run-metrics panel
 
   # --- Align counts <-> metadata (identity-checked; FAIL on mismatch) --------
   counts <- reconcile_samples(counts, metadata, sample_col)
@@ -108,6 +110,42 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
   # ===========================================================================
   log_section("Functional enrichment")
   enr <- run_enrichment(detab$table, cfg, cfg$organism, outdir)
+
+  # ===========================================================================
+  # Run metrics & environment provenance
+  # ===========================================================================
+  # WHY: a report should be self-describing — anyone reading it later can see how
+  # long it took, which pipeline version + package versions produced it, and the
+  # headline counts, without digging through the log. Written as a 2-column TSV
+  # the report renders verbatim.
+  sf <- tryCatch(DESeq2::sizeFactors(dds), error = function(e) NA_real_)
+  sig <- detab$table$significant %in% c(TRUE, "TRUE")
+  pkgver <- function(p) tryCatch(as.character(utils::packageVersion(p)), error = function(e) "NA")
+  metrics <- data.frame(
+    metric = c(
+      "Pipeline version", "Run timestamp", "Runtime",
+      "Samples", "Genes (input)", "Genes (after filter)", "Genes filtered",
+      "Significant DEGs", "DEGs up / down", "Size factors (min-max)",
+      "Organism", "Design", "Contrast",
+      "R version", "Bioconductor", "DESeq2", "apeglm", "clusterProfiler",
+      "Platform", "Host"),
+    value = c(
+      pipeline_version, run_timestamp,
+      sprintf("%.1f s", as.numeric(difftime(Sys.time(), t0, units = "secs"))),
+      ncol(counts), flt$n_before, flt$n_after,
+      sprintf("%.1f%%", 100 * (flt$n_before - flt$n_after) / flt$n_before),
+      detab$n_sig, sprintf("%d / %d", sum(sig & detab$table$log2FoldChange > 0, na.rm = TRUE),
+                                       sum(sig & detab$table$log2FoldChange < 0, na.rm = TRUE)),
+      if (all(is.na(sf))) "NA" else sprintf("%.2f - %.2f", min(sf), max(sf)),
+      cfg$organism, cfg$design,
+      sprintf("%s: %s vs %s", cfg$contrast[[1]], cfg$contrast[[2]], cfg$contrast[[3]]),
+      R.version.string, tryCatch(as.character(BiocManager::version()), error = function(e) "NA"),
+      pkgver("DESeq2"), pkgver("apeglm"), pkgver("clusterProfiler"),
+      R.version$platform, Sys.info()[["nodename"]]),
+    stringsAsFactors = FALSE)
+  utils::write.table(metrics, file.path(outdir, "qc", "run_metrics.tsv"),
+                     sep = "\t", quote = FALSE, row.names = FALSE)
+  log_info(sprintf("Run metrics written (runtime %s).", metrics$value[3]))
 
   # ===========================================================================
   # Final QC summary + report

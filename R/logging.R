@@ -101,6 +101,20 @@ stop_pipeline <- function(msg) {
   }
 }
 
+#' Resolve the pipeline version string: contents of the VERSION file, annotated
+#' with the short git SHA when the project is a git checkout.
+#' WHY: stamping the exact code version on every report/log makes a result
+#' traceable to the commit that produced it.
+get_pipeline_version <- function(project_root = ".") {
+  v <- tryCatch(trimws(readLines(file.path(project_root, "VERSION"), warn = FALSE)[1]),
+                error = function(e) "dev")
+  sha <- tryCatch(
+    suppressWarnings(system2("git", c("-C", project_root, "rev-parse", "--short", "HEAD"),
+                             stdout = TRUE, stderr = FALSE)),
+    error = function(e) character(0))
+  if (length(sha) && nzchar(sha[1])) paste0(v, " (", sha[1], ")") else v
+}
+
 #' Record the full session (package versions, R build, platform) to the log.
 #' WHY: reproducibility — sessionInfo() is the ground-truth manifest of what
 #' actually ran, complementing renv.lock. Called at the very end of a run.

@@ -35,6 +35,17 @@ Any QC **FAIL** stops the run and returns a non-zero exit code (override with
   format, every config option, every output file, how to read the QC report,
   reproducibility model, and troubleshooting.
 - **[docs/pipeline.svg](docs/pipeline.svg)** — the full pipeline DAG.
+- **[examples/airway/](examples/airway/)** — committed positive-control output:
+  the actual QC table, DE results, plots, enrichment, run metrics, and HTML
+  report from the `airway` validation run.
+
+## Positive control
+
+The built-in `--validate` self-test runs the whole pipeline on the Bioconductor
+`airway` dataset and asserts it recovers the known glucocorticoid signature
+(CRISPLD2, DUSP1, KLF15 significant and up in treated). The exact output of that
+run is committed under [examples/airway/](examples/airway/) — QC panel (10 PASS),
+831 significant genes, 481 enriched GO:BP terms.
 
 ## Requirements
 

@@ -101,17 +101,27 @@ table.qc tr:hover td{ filter:brightness(0.97); }
 tr.row-PASS td:first-child{ box-shadow:inset 4px 0 0 var(--pass);} tr.row-WARN td:first-child{ box-shadow:inset 4px 0 0 var(--warn);} tr.row-FAIL td:first-child{ box-shadow:inset 4px 0 0 var(--fail);}
 /* Instant, styled hover tooltip on check names (native title[] is slow + clipped). */
 .tip{ position:relative; border-bottom:1px dotted var(--muted); cursor:help; }
+/* Raise the whole cell's stacking context on hover so the tooltip floats ABOVE
+   every later row (position:relative alone does not create a stacking context;
+   a z-index does). */
+table.qc tr:hover, table.qc td:hover, .tip:hover{ position:relative; z-index:1000; }
 .tip:hover::after{
-  content:attr(data-tip); position:absolute; left:0; top:150%; z-index:60;
+  content:attr(data-tip); position:absolute; left:0; top:150%; z-index:1001;
   width:270px; white-space:normal; background:#1f2733; color:#fff;
   font-size:12.5px; font-weight:500; line-height:1.45; padding:9px 11px;
   border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.30); pointer-events:none; }
 .tip:hover::before{
-  content:""; position:absolute; left:12px; top:135%; z-index:61;
+  content:""; position:absolute; left:12px; top:135%; z-index:1001;
   border:6px solid transparent; border-bottom-color:#1f2733; pointer-events:none; }
 .forced{ background:var(--fail); color:#fff; padding:14px 18px; border-radius:12px; font-weight:700;
   box-shadow:0 8px 24px rgba(214,69,69,.35); margin:16px 0; }
 .note{ color:var(--muted); font-size:14px; }
+/* run-metrics definition grid */
+.metrics{ display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:2px 22px; }
+.metrics .m{ display:flex; justify-content:space-between; gap:12px; padding:7px 2px;
+  border-bottom:1px solid var(--line); font-size:13.5px; }
+.metrics .mk{ color:var(--muted); }
+.metrics .mv{ font-weight:650; text-align:right; font-variant-numeric:tabular-nums; }
 .legend{ font-size:13px; color:var(--muted); margin:8px 0 0; }
 .legend span{ display:inline-block; margin-right:14px; }
 .dot{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:middle; }
@@ -193,6 +203,25 @@ if (is.null(qc)) { cat("_QC results not found._") } else {
                 ifelse(is.na(qc$value[i]),"",qc$value[i]), ifelse(is.na(qc$message[i]),"",qc$message[i])))
   }
   cat('</table>')
+}
+```
+
+# Run metrics & environment
+
+Provenance for this run -- how long it took, the exact pipeline and package
+versions that produced it, and the headline counts. Everything here is also
+written to `qc/run_metrics.tsv` and the run log.
+
+```{r metrics, results='asis'}
+mm <- read_tsv_safe(file.path(outdir, "qc", "run_metrics.tsv"))
+if (is.null(mm)) { cat("_Run metrics not found._") } else {
+  # Two-column definition grid inside a card; wraps responsively.
+  cat('<div class="card"><div class="metrics">')
+  for (i in seq_len(nrow(mm))) {
+    cat(sprintf('<div class="m"><span class="mk">%s</span><span class="mv">%s</span></div>',
+                mm$metric[i], mm$value[i]))
+  }
+  cat('</div></div>')
 }
 ```
 

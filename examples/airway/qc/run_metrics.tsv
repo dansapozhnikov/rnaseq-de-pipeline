@@ -1,0 +1,21 @@
+metric	value
+Pipeline version	0.1.0 (88887c3)
+Run timestamp	20260727_160208
+Runtime	38.8 s
+Samples	8
+Genes (input)	63677
+Genes (after filter)	17199
+Genes filtered	73.0%
+Significant DEGs	831
+DEGs up / down	452 / 379
+Size factors (min-max)	0.67 - 1.40
+Organism	human
+Design	~ cell + dex
+Contrast	dex: trt vs untrt
+R version	R version 4.3.1 (2023-06-16)
+Bioconductor	3.18
+DESeq2	1.42.1
+apeglm	1.24.0
+clusterProfiler	4.10.1
+Platform	aarch64-apple-darwin20
+Host	MacBookPro

@@ -66,13 +66,16 @@ run_timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 # ---------------------------------------------------------------------------
 # Validate mode: hand off to the airway self-test (its own asserts + exit code).
 # ---------------------------------------------------------------------------
+# Resolve the pipeline version once (VERSION file + git SHA) for provenance.
+pipeline_version <- get_pipeline_version(PROJECT_ROOT)
+
 if (isTRUE(opt$validate)) {
   source(file.path(PROJECT_ROOT, "tests", "validate_airway.R"))
   cfg_path <- opt$config %||% file.path(PROJECT_ROOT, "config", "config.example.yaml")
   outdir <- opt$outdir %||% file.path("results", "airway_validation")
   ok <- validate_airway(cfg_path = cfg_path, outdir = outdir,
                         run_timestamp = run_timestamp, force = opt$force,
-                        project_root = PROJECT_ROOT)
+                        project_root = PROJECT_ROOT, pipeline_version = pipeline_version)
   quit(save = "no", status = if (isTRUE(ok)) 0L else 1L)
 }
 
@@ -109,7 +112,7 @@ metadata <- if (!is.null(loaded$coldata) && is.null(opt$metadata)) {
 # Run everything.
 result <- run_pipeline_core(counts, metadata, cfg, outdir, run_timestamp,
                             sample_col = opt$sample_col, tx2gene = opt$tx2gene,
-                            force = opt$force)
+                            force = opt$force, pipeline_version = pipeline_version)
 
 # Capture sessionInfo() to the log for reproducibility, then finish.
 log_session_info()
