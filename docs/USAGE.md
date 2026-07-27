@@ -386,6 +386,43 @@ pass reproduces identical DEG calls across runs on the same environment.
 
 ---
 
+## 10a. Resumability (checkpoint cache)
+
+Every run is **resumable**. The expensive, deterministic stages — the DESeq fit
+(size factors + dispersions + GLM), the VST, per-contrast LFC shrinkage +
+annotation, and enrichment (ORA/GSEA) — are memoized to `<outdir>/cache/` as
+`.rds` files. If a run is interrupted (a crash, an HPC pre-emption, `Ctrl-C`) or
+simply re-run, finished stages reload instantly and only what changed is
+recomputed.
+
+**How staleness is detected.** Each cache entry's key is a content hash of
+everything that determines its result: the count matrix, the sample sheet, the
+relevant config values, the upstream stage's key, **and a fingerprint of the
+compute code itself** (the deparsed bodies of the compute functions). So:
+
+- Re-running unchanged → every stage reloads; near-instant.
+- Change `padj_cutoff` → the DESeq fit and VST are **reused**; only DE +
+  enrichment recompute (their keys include the cutoff via `alpha`).
+- Edit a compute function (committed *or not*) → its stage and everything
+  downstream recompute. Correctness is never traded for reuse.
+
+**Control.**
+
+- On by default. Disable in config with `resume.enable: false`, or per-run with
+  the `--no-resume` flag (computes every stage fresh, writes/reads no cache).
+- The cache lives under the output directory, so deleting `results/` (or just
+  `results/cache/`) clears it. It is git-ignored.
+
+```bash
+Rscript run_pipeline.R --counts counts.tsv --metadata samples.csv --config config/config.yaml   # resumable
+Rscript run_pipeline.R ... --no-resume                                                            # force fresh
+```
+
+On HPC, this means a job killed by a wall-clock limit can simply be resubmitted:
+it picks up right after the last completed stage.
+
+---
+
 ## 11. Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -398,6 +435,7 @@ pass reproduces identical DEG calls across runs on the same environment.
 | `Could not auto-detect a supported format` | Ambiguous input. | Pass `--input-format` explicitly (§4). |
 | Config parses as empty / all fields "missing" | Non-ASCII characters in `config.yaml` under a C locale. | Keep the config ASCII (the loader reads UTF-8, but ASCII is safest). |
 | Report not rendered | `rmarkdown`/`pandoc` missing. | Install pandoc; the analysis outputs (tables/plots) are still written regardless. |
+| Re-run reused an old result I didn't expect | The checkpoint cache saw unchanged inputs/config/code. | It only reuses when the content hash matches, but to force a fully fresh run pass `--no-resume` (or delete `<outdir>/cache/`). |
 
 ---
 

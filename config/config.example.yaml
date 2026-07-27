@@ -88,6 +88,18 @@ enrichment:
   padj_cutoff: 0.05                   # significance cut for enriched terms
 
 # -----------------------------------------------------------------------------
+# Resumability (checkpoint cache)
+# -----------------------------------------------------------------------------
+resume:
+  enable: true                        # reuse cached intermediates under <outdir>/cache/
+                                      #   so an interrupted or re-run job skips the heavy
+                                      #   stages (DESeq fit, VST, LFC shrinkage, enrichment).
+                                      #   The cache key includes the input data, the relevant
+                                      #   config, AND a fingerprint of the compute code, so any
+                                      #   real change correctly forces a recompute. Override for
+                                      #   a single run with the CLI flag --no-resume.
+
+# -----------------------------------------------------------------------------
 # Outputs
 # -----------------------------------------------------------------------------
 outputs:

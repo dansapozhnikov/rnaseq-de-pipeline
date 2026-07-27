@@ -15,10 +15,10 @@
 #' @return TRUE if all biological assertions pass, FALSE otherwise.
 validate_airway <- function(cfg_path, outdir, run_timestamp = NULL,
                             force = FALSE, project_root = ".",
-                            pipeline_version = NULL) {
+                            pipeline_version = NULL, resume = TRUE) {
   # If invoked standalone (not via run_pipeline.R), source the modules first.
   if (!exists("run_pipeline_core", mode = "function")) {
-    for (f in c("logging.R", "config.R", "io_detect.R", "qc.R", "normalize.R",
+    for (f in c("logging.R", "cache.R", "config.R", "io_detect.R", "qc.R", "normalize.R",
                 "explore.R", "batch.R", "de.R", "enrich.R", "report.R", "pipeline.R")) {
       source(file.path(project_root, "R", f))
     }
@@ -52,7 +52,7 @@ validate_airway <- function(cfg_path, outdir, run_timestamp = NULL,
   # --- Run the WHOLE pipeline (same path as a real run) ----------------------
   result <- run_pipeline_core(counts, meta, cfg, outdir, run_timestamp,
                               sample_col = "sample", force = force,
-                              pipeline_version = pipeline_version)
+                              pipeline_version = pipeline_version, resume = resume)
 
   # ===========================================================================
   # Assertions on the recovered biology

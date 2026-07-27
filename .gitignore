@@ -10,6 +10,9 @@ renv/staging/
 renv/python/
 renv/sandbox/
 
+# --- Checkpoint cache (resumability) -----------------------------------------
+cache/
+
 # --- Logs ---------------------------------------------------------------------
 *.log
 

@@ -26,7 +26,7 @@ suppressPackageStartupMessages(library(optparse))
 PROJECT_ROOT <- dirname(.this_file)
 
 # Source modules in dependency order (logging first: defines stop_pipeline).
-for (f in c("logging.R", "config.R", "io_detect.R", "qc.R", "normalize.R",
+for (f in c("logging.R", "cache.R", "config.R", "io_detect.R", "qc.R", "normalize.R",
             "explore.R", "batch.R", "de.R", "enrich.R", "report.R", "pipeline.R")) {
   source(file.path(PROJECT_ROOT, "R", f))
 }
@@ -53,6 +53,8 @@ option_list <- list(
               help = "STAR count column: 2=unstranded, 3=fwd, 4=rev [default %default]."),
   make_option("--force", action = "store_true", default = FALSE,
               help = "Downgrade QC FAIL -> WARN and continue (logged)."),
+  make_option("--no-resume", dest = "no_resume", action = "store_true", default = FALSE,
+              help = "Disable the checkpoint cache; compute every stage fresh."),
   make_option("--validate", action = "store_true", default = FALSE,
               help = "Run the airway positive-control self-test end-to-end.")
 )
@@ -75,7 +77,8 @@ if (isTRUE(opt$validate)) {
   outdir <- opt$outdir %||% file.path("results", "airway_validation")
   ok <- validate_airway(cfg_path = cfg_path, outdir = outdir,
                         run_timestamp = run_timestamp, force = opt$force,
-                        project_root = PROJECT_ROOT, pipeline_version = pipeline_version)
+                        project_root = PROJECT_ROOT, pipeline_version = pipeline_version,
+                        resume = !isTRUE(opt$no_resume))
   quit(save = "no", status = if (isTRUE(ok)) 0L else 1L)
 }
 
@@ -109,10 +112,14 @@ metadata <- if (!is.null(loaded$coldata) && is.null(opt$metadata)) {
   read.csv(opt$metadata, stringsAsFactors = FALSE, check.names = FALSE)
 }
 
+# Resolve resume: on unless the config disables it or --no-resume is passed.
+resume_enabled <- isTRUE(cfg$resume$enable %||% TRUE) && !isTRUE(opt$no_resume)
+
 # Run everything.
 result <- run_pipeline_core(counts, metadata, cfg, outdir, run_timestamp,
                             sample_col = opt$sample_col, tx2gene = opt$tx2gene,
-                            force = opt$force, pipeline_version = pipeline_version)
+                            force = opt$force, pipeline_version = pipeline_version,
+                            resume = resume_enabled)
 
 # Capture sessionInfo() to the log for reproducibility, then finish.
 log_session_info()

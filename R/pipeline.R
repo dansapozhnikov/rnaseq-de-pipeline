@@ -22,10 +22,12 @@
 #' @param sample_col Metadata column holding sample IDs (default "sample").
 #' @param tx2gene Unused here (kept for signature symmetry with loaders).
 #' @param force If TRUE, downgrade QC FAIL -> WARN and continue.
+#' @param resume If TRUE (default), reuse cached intermediates from a prior run
+#'   when inputs + config + code are unchanged; only recompute what changed.
 #' @return list(qc, de, dds, report) -- used by the airway validation to assert.
 run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
                               sample_col = "sample", tx2gene = NULL, force = FALSE,
-                              pipeline_version = "dev") {
+                              pipeline_version = "dev", resume = TRUE) {
   # Determinism: fix the seed before any stochastic step (shrinkage, plotting).
   set.seed(cfg$seed)
   tested <- cfg$contrast[[1]]
@@ -44,6 +46,23 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
   counts <- reconcile_samples(counts, metadata, sample_col)
   rownames(metadata) <- as.character(metadata[[sample_col]])
   metadata <- metadata[colnames(counts), , drop = FALSE]
+
+  # --- Resumability: build the checkpoint cache ------------------------------
+  # The base key captures everything run-wide that must invalidate ALL cached
+  # stages when it changes: the count data, the sample sheet, the design/contrast,
+  # the seed, the low-count-filter thresholds, and a fingerprint of the compute
+  # code itself. Stage-specific inputs are added per stage below.
+  cache <- new_cache(
+    outdir, enable = isTRUE(resume), version = pipeline_version,
+    base_deps = list(counts, metadata, cfg$design, cfg$contrast, cfg$seed,
+                     cfg$qc$min_count, cfg$qc$min_replicates_per_group,
+                     cache_code_fingerprint()))
+  if (isTRUE(resume)) {
+    log_info(sprintf("Resume enabled: checkpoint cache at %s (finished stages are reused).",
+                     cache$dir))
+  } else {
+    log_info("Resume disabled (--no-resume): every stage computed fresh.")
+  }
 
   # ===========================================================================
   # QC -- pre-model checks (the ones that can FAIL and stop the run)
@@ -70,17 +89,32 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
   # Normalize: build, filter, fit
   # ===========================================================================
   log_section("Normalization & model fit")
-  dds <- build_dds(counts, metadata, cfg$design, cfg$contrast)
-  flt <- filter_low_counts(dds, cfg)
+  # The DESeq fit (size factors + dispersions + GLM) is the single most expensive
+  # stage, so it is the primary checkpoint. We cache the fitted object together
+  # with the pre/post-filter gene counts (needed by QC + metrics on resume).
+  test_type <- cfg$de$test %||% "Wald"
+  fit <- with_cache(
+    cache, "deseq_fit", deps = list(test_type, cfg$de$reduced),
+    compute = function() {
+      dds0 <- build_dds(counts, metadata, cfg$design, cfg$contrast)
+      flt0 <- filter_low_counts(dds0, cfg)
+      list(dds = run_deseq(flt0$dds, test = test_type, reduced = cfg$de$reduced),
+           n_before = flt0$n_before, n_after = flt0$n_after)
+    })
+  dds <- fit$dds
+  flt <- list(n_before = fit$n_before, n_after = fit$n_after)
+  dds_key <- key_of(fit)   # thread as `parent` so downstream cascades on refit
+  # QC checks always run (cheap) so the report reflects this run regardless of cache.
   qc_check_low_count_filter(qc, flt$n_before, flt$n_after, cfg)
-  dds <- run_deseq(flt$dds, test = cfg$de$test %||% "Wald", reduced = cfg$de$reduced)
   qc_check_dispersion(qc, dds)
 
   # ===========================================================================
   # Explore: VST -> batch view -> PCA -> variance-vs-metadata
   # ===========================================================================
   log_section("Exploratory analysis")
-  vsd <- get_vst(dds, blind = TRUE)
+  # VST is moderately expensive on large data; cache it, chained to the fit key.
+  vsd <- with_cache(cache, "vst", deps = list(blind = TRUE), parent = dds_key,
+                    compute = function() get_vst(dds, blind = TRUE))
 
   # Number of top-variance genes for PCA is config-driven (no magic number);
   # default to the DESeq2 convention of 500 if the field is absent.
@@ -118,14 +152,27 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
   log_info(sprintf("Extracting %d result(s): %s", length(specs),
                    paste(vapply(specs, `[[`, character(1), "name"), collapse = ", ")))
   de_all <- list()
+  primary_de_key <- NULL
   for (i in seq_along(specs)) {
     spec <- specs[[i]]
     # Primary spec keeps the unsuffixed de_results.tsv / volcano.png names so the
     # report + airway validation are unchanged; extras get a sanitised suffix.
     suffix <- if (i == 1) "" else paste0("_", gsub("[^A-Za-z0-9]+", "_", spec$name))
-    res <- run_results(dds, spec, cfg)
-    res <- shrink_lfc(dds, spec, res, cfg$de$shrink)
-    de_df <- annotate_results(res, cfg$organism)
+    # Cache the shrunk + annotated results (the apeglm shrinkage and OrgDb lookup
+    # are the cost). Thresholding (significant flag), the TSV, and the volcano are
+    # cheap and always regenerated -- so changing padj/lfc cutoffs does NOT force a
+    # re-shrink (padj itself depends on alpha, so that stays in the key).
+    stage <- paste0("de_", gsub("[^A-Za-z0-9]+", "_", spec$name))
+    de_df <- with_cache(
+      cache, stage,
+      deps = list(spec, cfg$de$shrink, cfg$de$padj_cutoff, cfg$organism),
+      parent = dds_key,
+      compute = function() {
+        res <- run_results(dds, spec, cfg)
+        res <- shrink_lfc(dds, spec, res, cfg$de$shrink)
+        annotate_results(res, cfg$organism)
+      })
+    if (i == 1) primary_de_key <- key_of(de_df)
     detab_i <- build_de_table(de_df, cfg, outdir, suffix = suffix)
     plot_volcano(detab_i$table, cfg, outdir, suffix = suffix,
                  title = sprintf("Differential expression: %s", spec$name))
@@ -138,7 +185,19 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
   # Functional enrichment (guarded) -- run on the PRIMARY contrast
   # ===========================================================================
   log_section("Functional enrichment")
-  enr <- run_enrichment(detab$table, cfg, cfg$organism, outdir)
+  # ORA/GSEA (GSEA especially) are the cost here; cache them chained to the
+  # primary DE key. run_enrichment also WRITES tsv/plot side effects, so on a
+  # cache hit we verify those declared files still exist -- if any are missing
+  # (e.g. outputs cleared but cache kept), we recompute rather than point at gaps.
+  enr <- with_cache(
+    cache, "enrichment",
+    deps = list(cfg$enrichment, cfg$organism, cfg$de$padj_cutoff, cfg$de$lfc_cutoff),
+    parent = primary_de_key,
+    verify = function(e) {
+      paths <- Filter(Negate(is.null), list(e$ora_path, e$gsea_path, e$dotplot))
+      all(vapply(paths, file.exists, logical(1)))
+    },
+    compute = function() run_enrichment(detab$table, cfg, cfg$organism, outdir))
 
   # ===========================================================================
   # Run metrics & environment provenance
