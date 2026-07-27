@@ -239,6 +239,7 @@ missing required field is a clear startup error. Keep the file ASCII.
 | `de.padj_cutoff` | BH-adjusted p significance cut (also DESeq2 `alpha`). | `0.05` |
 | `de.lfc_cutoff` | \|log2FC\| threshold for "biologically notable". | `1` |
 | `de.shrink` | LFC shrinkage: `apeglm` / `ashr` / `normal` / `none`. | `apeglm` |
+| `explore.pca_ntop` | # most-variable genes for PCA. 500 = DESeq2 `plotPCA()` convention (not a hard best practice); 1000–2000 broadens it; a very large value ≈ all genes. | `500` |
 | `enrichment.enable` | Run GO ORA + GSEA. | `true` |
 | `enrichment.ontology` | GO ontology: `BP` / `MF` / `CC`. | `BP` |
 | `enrichment.padj_cutoff` | Significance cut for enriched terms. | `0.05` |

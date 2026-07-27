@@ -39,29 +39,37 @@ qc_init <- function() {
 #' @param name Short check name (e.g. "library_size").
 #' @param severity Severity if the check does NOT pass: "WARN" or "FAIL".
 #' @param condition Logical; TRUE => PASS, FALSE => status becomes `severity`.
-#' @param message Human explanation (shown on non-pass, and stored always).
+#' @param message Explanation of the PROBLEM, shown when the check does not pass.
 #' @param value Optional observed value string for the record/report.
+#' @param pass_message Message stored/shown when the check PASSES. WHY: a single
+#'   failure-worded message reads wrong on a green row (e.g. "sample has only 15M
+#'   reads" or "dispersion is outside the band" when it actually passed). Supplying
+#'   a positive/neutral pass_message keeps failures loud while passes read correctly.
+#'   Defaults to `message` for backward compatibility.
 #' @return `qc` (invisibly), with one row appended.
 #' The immediate colored print is what makes failures impossible to miss while
 #' the run is happening; the stored row feeds the banner, the TSV, and the report.
-qc_check <- function(qc, name, severity, condition, message = "", value = "") {
+qc_check <- function(qc, name, severity, condition, message = "", value = "",
+                     pass_message = NULL) {
   severity <- match.arg(severity, c("WARN", "FAIL"))
   status <- if (isTRUE(condition)) "PASS" else severity
+  # The message actually recorded/shown depends on outcome.
+  shown <- if (status == "PASS" && !is.null(pass_message)) pass_message else message
 
   qc$results <- rbind(qc$results, data.frame(
     check = name, status = status, severity = severity,
-    value = as.character(value), message = message, stringsAsFactors = FALSE))
+    value = as.character(value), message = shown, stringsAsFactors = FALSE))
 
   # Loud, colored, per-check console line.
   label <- sprintf("%-26s %s", name, if (nzchar(value)) paste0("(", value, ")") else "")
   if (status == "PASS") {
     cli::cli_alert_success(crayon::green(paste0("PASS  ", label)))
   } else if (status == "WARN") {
-    cli::cli_alert_warning(crayon::yellow(paste0("WARN  ", label, " - ", message)))
+    cli::cli_alert_warning(crayon::yellow(paste0("WARN  ", label, " - ", shown)))
   } else {
-    cli::cli_alert_danger(crayon::red(crayon::bold(paste0("FAIL  ", label, " - ", message))))
+    cli::cli_alert_danger(crayon::red(crayon::bold(paste0("FAIL  ", label, " - ", shown))))
   }
-  .log_to_file(status, sprintf("QC %s [%s] %s %s", name, status, value, message))
+  .log_to_file(status, sprintf("QC %s [%s] %s %s", name, status, value, shown))
   invisible(qc)
 }
 
@@ -74,8 +82,9 @@ qc_check <- function(qc, name, severity, condition, message = "", value = "") {
 qc_check_sample_alignment <- function(qc, counts, metadata) {
   n_c <- ncol(counts); n_m <- nrow(metadata)
   qc_check(qc, "sample_alignment", "FAIL", n_c == n_m,
-           sprintf("counts have %d samples but metadata has %d rows.", n_c, n_m),
-           value = sprintf("%d vs %d", n_c, n_m))
+           sprintf("MISMATCH: counts have %d samples but metadata has %d rows.", n_c, n_m),
+           value = sprintf("%d vs %d", n_c, n_m),
+           pass_message = sprintf("%d count columns match %d metadata rows.", n_c, n_m))
 }
 
 #' Check 2 -- raw-count sanity: integer and non-negative. The loaders already
@@ -83,8 +92,9 @@ qc_check_sample_alignment <- function(qc, counts, metadata) {
 qc_check_raw_counts <- function(qc, counts) {
   ok <- is.integer(counts) && !any(counts < 0)
   qc_check(qc, "raw_count_sanity", "FAIL", ok,
-           "counts must be non-negative integers (raw counts, not TPM/CPM).",
-           value = if (ok) "integer, non-negative" else "NON-INTEGER/NEGATIVE")
+           "counts are NOT non-negative integers (looks like TPM/CPM, not raw counts).",
+           value = if (ok) "integer, non-negative" else "NON-INTEGER/NEGATIVE",
+           pass_message = "counts are non-negative integers (raw counts).")
 }
 
 #' Check 3 -- per-sample library size. WARN below min, FAIL below the hard floor.
@@ -92,19 +102,23 @@ qc_check_library_size <- function(qc, counts, cfg) {
   libsize <- colSums(counts)
   worst <- min(libsize)
   worst_id <- names(libsize)[which.min(libsize)]
+  fmt <- function(x) format(x, big.mark = ",", scientific = FALSE)
   # Hard floor first: a sample below this is unusable.
   qc_check(qc, "library_size_floor", "FAIL",
            worst >= cfg$qc$min_library_size_fail,
-           sprintf("sample '%s' has only %s reads (hard floor %s).",
-                   worst_id, format(worst, big.mark=","),
-                   format(cfg$qc$min_library_size_fail, big.mark=",", scientific=FALSE)),
-           value = sprintf("min=%s", format(worst, big.mark=",")))
+           sprintf("sample '%s' has only %s reads, below the hard floor of %s.",
+                   worst_id, fmt(worst), fmt(cfg$qc$min_library_size_fail)),
+           value = sprintf("min=%s", fmt(worst)),
+           pass_message = sprintf("smallest library %s reads, above the hard floor of %s.",
+                                  fmt(worst), fmt(cfg$qc$min_library_size_fail)))
   # Soft threshold: WARN.
   qc_check(qc, "library_size_min", "WARN",
            worst >= cfg$qc$min_library_size,
-           sprintf("sample '%s' below recommended %s reads.",
-                   worst_id, format(cfg$qc$min_library_size, big.mark=",", scientific=FALSE)),
-           value = sprintf("min=%s", format(worst, big.mark=",")))
+           sprintf("sample '%s' has %s reads, below the recommended %s.",
+                   worst_id, fmt(worst), fmt(cfg$qc$min_library_size)),
+           value = sprintf("min=%s", fmt(worst)),
+           pass_message = sprintf("smallest library %s reads, at/above the recommended %s.",
+                                  fmt(worst), fmt(cfg$qc$min_library_size)))
 }
 
 #' Check 4 -- genes detected (count > 0) per sample. WARN if any sample is low.
@@ -114,9 +128,11 @@ qc_check_genes_detected <- function(qc, counts, cfg) {
   worst_id <- names(detected)[which.min(detected)]
   qc_check(qc, "genes_detected", "WARN",
            worst >= cfg$qc$min_genes_detected,
-           sprintf("sample '%s' detects only %d genes (min %d).",
+           sprintf("sample '%s' detects only %d genes, below the recommended %d.",
                    worst_id, worst, cfg$qc$min_genes_detected),
-           value = sprintf("min=%d", worst))
+           value = sprintf("min=%d", worst),
+           pass_message = sprintf("lowest sample detects %d genes, at/above the recommended %d.",
+                                  worst, cfg$qc$min_genes_detected))
 }
 
 #' Check 5 -- replicates per group in the TESTED factor (last term of the design).
@@ -130,12 +146,14 @@ qc_check_replicates <- function(qc, metadata, tested_factor, cfg) {
   }
   tab <- table(metadata[[tested_factor]])
   worst <- min(tab)
+  counts_txt <- paste(sprintf("%s=%d", names(tab), as.integer(tab)), collapse = ", ")
   qc_check(qc, "replicates_per_group", "FAIL",
            worst >= cfg$qc$min_replicates_per_group,
-           sprintf("group '%s' has %d replicate(s); need >= %d. Counts: %s",
-                   names(tab)[which.min(tab)], worst, cfg$qc$min_replicates_per_group,
-                   paste(sprintf("%s=%d", names(tab), as.integer(tab)), collapse=", ")),
-           value = sprintf("min group n=%d", worst))
+           sprintf("group '%s' has only %d replicate(s); need >= %d. Counts: %s",
+                   names(tab)[which.min(tab)], worst, cfg$qc$min_replicates_per_group, counts_txt),
+           value = sprintf("min group n=%d", worst),
+           pass_message = sprintf("all groups have >= %d replicates. Counts: %s",
+                                  cfg$qc$min_replicates_per_group, counts_txt))
 }
 
 #' Check 6 -- design identifiability. Build the model matrix and check it is full
@@ -180,9 +198,11 @@ qc_check_low_count_filter <- function(qc, n_before, n_after, cfg) {
   pct <- 100 * (n_before - n_after) / n_before
   qc_check(qc, "low_count_filter", "WARN",
            pct <= cfg$qc$max_pct_genes_filtered,
-           sprintf("low-count filter removed %.1f%% of genes (> %d%% threshold).",
+           sprintf("low-count filter removed %.1f%% of genes, above the %d%% warning threshold.",
                    pct, cfg$qc$max_pct_genes_filtered),
-           value = sprintf("%d -> %d genes (%.1f%% removed)", n_before, n_after, pct))
+           value = sprintf("%d -> %d genes (%.1f%% removed)", n_before, n_after, pct),
+           pass_message = sprintf("low-count filter removed %.1f%% of genes, within the %d%% threshold.",
+                                  pct, cfg$qc$max_pct_genes_filtered))
 }
 
 #' Check 8 -- dispersion-fit sanity (post-DESeq). WARN if the fitted gene-wise
@@ -194,8 +214,9 @@ qc_check_dispersion <- function(qc, dds) {
   # Heuristic sane band for bulk RNA-seq gene-wise dispersion medians.
   ok <- is.finite(med) && med > 1e-4 && med < 10
   qc_check(qc, "dispersion_fit", "WARN", ok,
-           sprintf("median dispersion %.4g is outside the expected 1e-4..10 band; check replicates/design.", med),
-           value = sprintf("median disp=%.4g", med))
+           sprintf("median dispersion %.4g is OUTSIDE the expected 1e-4..10 band; check replicates/design.", med),
+           value = sprintf("median disp=%.4g", med),
+           pass_message = sprintf("median dispersion %.4g is within the expected 1e-4..10 band.", med))
 }
 
 #' Check 9 -- outlier flag from Cook's distance (post-DESeq). WARN and LIST the
@@ -217,7 +238,8 @@ qc_check_cooks_outliers <- function(qc, dds, cfg) {
   qc_check(qc, "cooks_outliers", "WARN", length(flagged) == 0,
            sprintf("candidate outlier sample(s): %s (many high-Cook's genes). Not removed automatically.",
                    paste(flagged, collapse = ", ")),
-           value = if (length(flagged)) paste(flagged, collapse=",") else "none")
+           value = if (length(flagged)) paste(flagged, collapse=",") else "none",
+           pass_message = "no candidate outlier samples (Cook's distance).")
 }
 
 # ---------------------------------------------------------------------------

@@ -31,6 +31,8 @@ p_qc      <- file.path(outdir, "qc", "qc_results.tsv")
 p_varmeta <- file.path(outdir, "qc", "variance_vs_metadata.tsv")
 p_pca_tsv <- file.path(outdir, "tables", "pca_scores.tsv")
 p_pca_pv  <- file.path(outdir, "tables", "pca_percentvar.txt")
+p_pca_bc_tsv <- file.path(outdir, "tables", "pca_scores_bc.tsv")
+p_pca_bc_pv  <- file.path(outdir, "tables", "pca_percentvar_bc.txt")
 p_pca     <- file.path(outdir, "plots", "pca.png")
 p_pca_bc  <- file.path(outdir, "plots", "pca_batch_corrected.png")
 p_vm_png  <- file.path(outdir, "plots", "variance_vs_metadata.png")
@@ -43,8 +45,32 @@ p_dot     <- file.path(outdir, "plots", "enrichment_dotplot.png")
 read_tsv_safe  <- function(p, ...) if (file.exists(p)) utils::read.delim(p, check.names = FALSE, ...) else NULL
 img_tag <- function(p, alt = "") if (file.exists(p)) sprintf('<img src="%s" alt="%s" style="max-width:100%%;border-radius:8px;">\n', normalizePath(p), alt) else ""
 
+# Build an interactive PCA scatter from a saved scores TSV. Shared by the main
+# PCA and the batch-corrected PCA so both look and behave identically (hover =
+# sample + group; color = tested factor; symbol = batch variable when present).
+pca_plotly <- function(scores_tsv, pv_txt, static_png) {
+  sc <- read_tsv_safe(scores_tsv)
+  pv <- if (file.exists(pv_txt)) as.numeric(strsplit(readLines(pv_txt), "\t")[[1]]) else NULL
+  color_by <- if (!is.null(cfg)) cfg$contrast[[1]] else NULL
+  if (have_plotly && !is.null(sc) && all(c("PC1","PC2") %in% colnames(sc)) &&
+      !is.null(color_by) && color_by %in% colnames(sc)) {
+    hover <- sprintf("<b>%s</b><br>%s: %s", sc$sample, color_by, sc[[color_by]])
+    args <- list(data = sc, x = ~PC1, y = ~PC2, type = "scatter", mode = "markers",
+                 color = sc[[color_by]], text = hover, hoverinfo = "text",
+                 marker = list(size = 13, line = list(width = 1, color = "#ffffff")))
+    bv <- if (nzchar(params$batch_vars)) trimws(strsplit(params$batch_vars, ",")[[1]])[1] else NA
+    if (!is.na(bv) && bv %in% colnames(sc)) args$symbol <- sc[[bv]]
+    return(plotly::layout(do.call(plotly::plot_ly, args),
+      xaxis = list(title = if (!is.null(pv)) sprintf("PC1: %s%% variance", pv[1]) else "PC1", zeroline = FALSE),
+      yaxis = list(title = if (!is.null(pv)) sprintf("PC2: %s%% variance", pv[2]) else "PC2", zeroline = FALSE),
+      legend = list(title = list(text = color_by))))
+  }
+  if (file.exists(static_png)) knitr::include_graphics(normalizePath(static_png)) else knitr::asis_output("_PCA not available._")
+}
+
 PAL <- list(up = "#e05252", down = "#3f7fbf", ns = "#c9ccd1",
             pass = "#2e9e5b", warn = "#e0a800", fail = "#d64545")
+pca_ntop <- if (!is.null(cfg) && !is.null(cfg$explore$pca_ntop)) cfg$explore$pca_ntop else 500
 ```
 
 ```{css, echo=FALSE}
@@ -229,35 +255,66 @@ if (is.null(mm)) { cat("_Run metrics not found._") } else {
 
 ## PCA
 
-PCA on the top-500 most variable variance-stabilized genes. Samples should
-separate by biological condition; separation driven by batch is a red flag.
-*Hover any point for its sample id and group.*
+Principal-component analysis of the **top `r pca_ntop`** most variable
+variance-stabilized genes (configurable via `explore.pca_ntop`). Each point is a
+sample; color = the tested factor, symbol = the batch variable (when present).
+*Hover any point for its sample id and group; drag to zoom.*
 
 ```{r pca}
-# NOTE: htmlwidgets (plotly) must be RETURNED as the chunk value -- not cat()'d --
-# so knitr's knit_print attaches the plotly.js dependency into the self-contained HTML.
-sc <- read_tsv_safe(p_pca_tsv)
-pv <- if (file.exists(p_pca_pv)) as.numeric(strsplit(readLines(p_pca_pv), "\t")[[1]]) else NULL
-color_by <- if (!is.null(cfg)) cfg$contrast[[1]] else NULL
-widget <- NULL
-if (have_plotly && !is.null(sc) && all(c("PC1","PC2") %in% colnames(sc)) && !is.null(color_by) && color_by %in% colnames(sc)) {
-  hover <- sprintf("<b>%s</b><br>%s: %s", sc$sample, color_by, sc[[color_by]])
-  args <- list(data = sc, x = ~PC1, y = ~PC2, type = "scatter", mode = "markers",
-               color = sc[[color_by]], text = hover, hoverinfo = "text",
-               marker = list(size = 13, line = list(width = 1, color = "#ffffff")))
-  bv <- if (nzchar(params$batch_vars)) trimws(strsplit(params$batch_vars, ",")[[1]])[1] else NA
-  if (!is.na(bv) && bv %in% colnames(sc)) args$symbol <- sc[[bv]]
-  widget <- plotly::layout(do.call(plotly::plot_ly, args),
-    xaxis = list(title = if (!is.null(pv)) sprintf("PC1: %s%% variance", pv[1]) else "PC1", zeroline = FALSE),
-    yaxis = list(title = if (!is.null(pv)) sprintf("PC2: %s%% variance", pv[2]) else "PC2", zeroline = FALSE),
-    legend = list(title = list(text = color_by)))
-}
-if (!is.null(widget)) widget else if (file.exists(p_pca)) knitr::include_graphics(normalizePath(p_pca)) else knitr::asis_output("_PCA not available._")
+# htmlwidgets (plotly) are RETURNED as the chunk value (not cat()'d) so knitr
+# attaches plotly.js into the self-contained HTML. Built via the shared helper.
+pca_plotly(p_pca_tsv, p_pca_pv, p_pca)
 ```
 
-```{r pca-batch, results='asis'}
-if (file.exists(p_pca_bc)) { cat("**After batch correction (visualization only):**\n\n"); cat(img_tag(p_pca_bc, "PCA batch-corrected")) }
+**Variance explained per component (scree).** How much of the total variance each
+PC captures -- the axes above show PC1 and PC2; this shows the full profile so
+you can judge how many components carry real structure.
+
+```{r scree}
+pv <- if (file.exists(p_pca_pv)) as.numeric(strsplit(readLines(p_pca_pv), "\t")[[1]]) else NULL
+if (have_plotly && !is.null(pv)) {
+  # Drop trailing (near-)zero components for a readable axis.
+  keep <- which(cumsum(pv) <= 99.9); if (length(keep) < 2) keep <- seq_len(min(length(pv), 5))
+  keep <- seq_len(min(max(keep) + 1, length(pv)))
+  labs <- paste0("PC", keep)
+  plotly::layout(
+    plotly::plot_ly(x = labs, y = pv[keep], type = "bar",
+      marker = list(color = "#4f46e5"),
+      text = sprintf("%.1f%%", pv[keep]), textposition = "outside",
+      hovertemplate = "%{x}: %{y:.1f}%<extra></extra>"),
+    xaxis = list(title = ""), yaxis = list(title = "% variance explained"),
+    margin = list(t = 10))
+} else knitr::asis_output("")
 ```
+
+**How to read this plot**
+
+- **Axes = directions of greatest variance, not biological quantities.** PC1
+  captures the single largest source of variation in the data, PC2 the next
+  largest (and so on). The **% variance** on each axis is how much of the total
+  spread that component explains -- a high PC1 % means most of the variation is
+  along one direction.
+- **Distance = overall transcriptional similarity.** Samples close together have
+  similar expression profiles across the top variable genes; samples far apart
+  differ.
+- **What "good" looks like:** samples separate by the **biological condition**
+  (the color) -- ideally along PC1. That means the treatment/condition is the
+  dominant signal in the data, which is what you want for a well-powered DE test.
+- **Batch-effect red flag:** if samples separate by a **technical/nuisance
+  variable** (the symbol -- e.g. batch, lane, donor) instead of, or on the same
+  axis as, the biological condition, technical variation is competing with (or
+  masking) the biology. The next two sections quantify and address this.
+- **Outlier check:** a single sample sitting far from the rest on any axis is a
+  candidate outlier -- cross-reference the `cooks_outliers` QC check above.
+- **Caveats:** PCA is unsupervised and uses only the top variable genes, so it is
+  a qualitative overview, not the DE result itself. Tight, well-separated groups
+  are reassuring but not required for DESeq2 to find real differences.
+- **On the gene count (`r pca_ntop`):** this is the DESeq2 `plotPCA()` default
+  (500) -- a widely used convention, **not** a rigorous best practice. It is fast
+  and makes results comparable across studies, but can over-weight a few very
+  high-variance genes. Using more genes (1,000-2,000) gives a broader view, and
+  because VST tames the mean-variance trend, running PCA on *all* genes is also
+  defensible. Adjust `explore.pca_ntop` if you want a different view.
 
 ## Variance explained by metadata
 
@@ -279,6 +336,31 @@ if (have_plotly && !is.null(vm) && ncol(vm) >= 1) {
     xaxis = list(title = ""), yaxis = list(title = "", autorange = "reversed"))
 }
 if (!is.null(widget)) widget else if (file.exists(p_vm_png)) knitr::include_graphics(normalizePath(p_vm_png)) else knitr::asis_output("_Not available._")
+```
+
+# Batch effects
+
+```{r batch-intro, results='asis'}
+bv <- if (nzchar(params$batch_vars)) params$batch_vars else ""
+if (!nzchar(bv)) {
+  cat('<p class="note">No batch / nuisance variable is present in the design ',
+      '(<code>', if (!is.null(cfg)) cfg$design else "", '</code>), so no batch ',
+      'correction is applicable.</p>', sep = "")
+} else {
+  cat(sprintf('<p>Batch / nuisance variable(s): <b>%s</b>. These are handled <b>inside the DE model</b> (design <code>%s</code>): DESeq2 estimates and removes their effect while testing the biological contrast &mdash; the raw counts are <b>never</b> modified for the statistical test.</p>',
+              bv, if (!is.null(cfg)) cfg$design else ""))
+  cat('<p class="note">The plot below re-runs PCA after <i>statistically subtracting</i> the batch effect (limma <code>removeBatchEffect</code>), <b>for visualization only</b>. Compare it to the PCA above: biological separation (color) should tighten and become cleaner once nuisance variation (symbol) is removed. If the two look identical, the batch variable was not contributing much; if the corrected plot separates the conditions far more cleanly, the design is correctly absorbing a real batch effect.</p>')
+}
+```
+
+```{r pca-bc}
+# Interactive batch-corrected PCA (same helper as the main PCA), shown only when
+# a batch variable exists and its corrected scores were written.
+if (nzchar(params$batch_vars) && file.exists(p_pca_bc_tsv)) {
+  pca_plotly(p_pca_bc_tsv, p_pca_bc_pv, p_pca_bc)
+} else {
+  knitr::asis_output("")
+}
 ```
 
 # Differential expression

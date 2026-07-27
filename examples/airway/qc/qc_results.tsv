@@ -1,11 +1,11 @@
 check	status	severity	value	message
-sample_alignment	PASS	FAIL	8 vs 8	counts have 8 samples but metadata has 8 rows.
-raw_count_sanity	PASS	FAIL	integer, non-negative	counts must be non-negative integers (raw counts, not TPM/CPM).
-library_size_floor	PASS	FAIL	min=15,163,415	sample 'SRR1039513' has only 15,163,415 reads (hard floor 100,000).
-library_size_min	PASS	WARN	min=15,163,415	sample 'SRR1039513' below recommended 1,000,000 reads.
-genes_detected	PASS	WARN	min=23124	sample 'SRR1039513' detects only 23124 genes (min 8000).
-replicates_per_group	PASS	FAIL	min group n=4	group 'trt' has 4 replicate(s); need >= 2. Counts: trt=4, untrt=4
+sample_alignment	PASS	FAIL	8 vs 8	8 count columns match 8 metadata rows.
+raw_count_sanity	PASS	FAIL	integer, non-negative	counts are non-negative integers (raw counts).
+library_size_floor	PASS	FAIL	min=15,163,415	smallest library 15,163,415 reads, above the hard floor of 100,000.
+library_size_min	PASS	WARN	min=15,163,415	smallest library 15,163,415 reads, at/above the recommended 1,000,000.
+genes_detected	PASS	WARN	min=23124	lowest sample detects 23124 genes, at/above the recommended 8000.
+replicates_per_group	PASS	FAIL	min group n=4	all groups have >= 2 replicates. Counts: trt=4, untrt=4
 design_identifiable	PASS	FAIL	rank 5 / 5 cols	design is full rank.
-low_count_filter	PASS	WARN	63677 -> 17199 genes (73.0% removed)	low-count filter removed 73.0% of genes (> 90% threshold).
-dispersion_fit	PASS	WARN	median disp=0.01864	median dispersion 0.01864 is outside the expected 1e-4..10 band; check replicates/design.
-cooks_outliers	PASS	WARN	none	candidate outlier sample(s):  (many high-Cook's genes). Not removed automatically.
+low_count_filter	PASS	WARN	63677 -> 17199 genes (73.0% removed)	low-count filter removed 73.0% of genes, within the 90% threshold.
+dispersion_fit	PASS	WARN	median disp=0.01864	median dispersion 0.01864 is within the expected 1e-4..10 band.
+cooks_outliers	PASS	WARN	none	no candidate outlier samples (Cook's distance).

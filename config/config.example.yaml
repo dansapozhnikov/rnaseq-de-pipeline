@@ -55,6 +55,19 @@ de:
   shrink: apeglm                      # LFC shrinkage estimator: apeglm | ashr | normal | none
 
 # -----------------------------------------------------------------------------
+# Exploratory analysis (PCA)
+# -----------------------------------------------------------------------------
+explore:
+  pca_ntop: 500                       # number of most-variable genes used for PCA.
+                                      #   500 = the DESeq2 plotPCA() default/convention
+                                      #   (NOT a hard best practice): fast and
+                                      #   comparable across studies, but can over-weight
+                                      #   a few high-variance genes. Raise to 1000-2000
+                                      #   for a broader view, or a very large number to
+                                      #   use (effectively) all genes -- also defensible
+                                      #   since VST tames the mean-variance trend.
+
+# -----------------------------------------------------------------------------
 # Functional enrichment (guarded: a missing OrgDb WARNs, never crashes)
 # -----------------------------------------------------------------------------
 enrichment:

@@ -43,7 +43,8 @@ compute_pca <- function(vsd, ntop = 500) {
 #'   (only wanted for the primary PCA, not the batch-corrected variant).
 #' @return Path to the saved PNG.
 plot_pca <- function(pca_res, metadata, color_by, shape_by = NULL, outdir,
-                     filename = "pca.png", save_scores = TRUE) {
+                     filename = "pca.png", save_scores = TRUE,
+                     scores_file = "pca_scores.tsv", pv_file = "pca_percentvar.txt") {
   df <- pca_res$scores
   # Bind metadata columns (avoid clobbering the existing 'sample' column).
   md <- metadata[match(df$sample, rownames(metadata)), , drop = FALSE]
@@ -78,9 +79,9 @@ plot_pca <- function(pca_res, metadata, color_by, shape_by = NULL, outdir,
     dir.create(tables_dir, recursive = TRUE, showWarnings = FALSE)
     scores_out <- df[, unique(c("sample", grep("^PC[1-9]", colnames(df), value = TRUE),
                                 colnames(metadata)))]
-    utils::write.table(scores_out, file.path(tables_dir, "pca_scores.tsv"),
+    utils::write.table(scores_out, file.path(tables_dir, scores_file),
                        sep = "\t", quote = FALSE, row.names = FALSE)
-    writeLines(paste(pv, collapse = "\t"), file.path(tables_dir, "pca_percentvar.txt"))
+    writeLines(paste(pv, collapse = "\t"), file.path(tables_dir, pv_file))
   }
   log_success(sprintf("PCA plot saved to %s", path))
   path

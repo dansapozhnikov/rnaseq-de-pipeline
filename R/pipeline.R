@@ -82,7 +82,10 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
   log_section("Exploratory analysis")
   vsd <- get_vst(dds, blind = TRUE)
 
-  pca <- compute_pca(vsd)
+  # Number of top-variance genes for PCA is config-driven (no magic number);
+  # default to the DESeq2 convention of 500 if the field is absent.
+  pca_ntop <- cfg$explore$pca_ntop %||% 500L
+  pca <- compute_pca(vsd, ntop = pca_ntop)
   shape_by <- {
     bv <- identify_batch_vars(cfg$design, tested)
     bv <- bv[bv %in% colnames(metadata)]
@@ -96,9 +99,12 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
   batch_vars <- batch_vars[batch_vars %in% colnames(metadata)]
   if (length(batch_vars)) {
     vsd_bc <- remove_batch_for_viz(vsd, as.data.frame(metadata), batch_vars, tested)
-    pca_bc <- compute_pca(vsd_bc)
+    pca_bc <- compute_pca(vsd_bc, ntop = pca_ntop)
+    # Persist the corrected scores too, so the report can render an INTERACTIVE
+    # batch-corrected PCA (matching the main one) in the Batch effects section.
     plot_pca(pca_bc, as.data.frame(metadata), color_by = tested, shape_by = shape_by,
-             outdir = outdir, filename = "pca_batch_corrected.png", save_scores = FALSE)
+             outdir = outdir, filename = "pca_batch_corrected.png", save_scores = TRUE,
+             scores_file = "pca_scores_bc.tsv", pv_file = "pca_percentvar_bc.txt")
   }
 
   # Post-model outlier check (WARN only; never auto-removes samples).

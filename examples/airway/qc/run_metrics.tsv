@@ -1,7 +1,7 @@
 metric	value
-Pipeline version	0.1.0 (88887c3)
-Run timestamp	20260727_160208
-Runtime	38.8 s
+Pipeline version	0.1.0 (ec62929)
+Run timestamp	20260727_163638
+Runtime	39.2 s
 Samples	8
 Genes (input)	63677
 Genes (after filter)	17199
