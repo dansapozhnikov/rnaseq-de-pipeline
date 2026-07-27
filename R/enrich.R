@@ -79,10 +79,20 @@ run_enrichment <- function(de_table, cfg, organism, outdir) {
   # Rank by the Wald statistic (sign = direction, magnitude = confidence).
   # ---------------------------------------------------------------------------
   gsea <- NULL; gsea_path <- NULL
-  rank_df <- de_table[!is.na(de_table$entrez) & !is.na(de_table$stat), ]
+  rank_df <- de_table[!is.na(de_table$entrez), ]
   rank_df <- rank_df[!duplicated(rank_df$entrez), ]
+  # Ranking metric: prefer the Wald statistic, but apeglm/ashr shrinkage DROPS the
+  # `stat` column, so fall back to signed -log10(p) = sign(LFC) * -log10(pvalue),
+  # which encodes both direction and confidence and is a standard GSEA ranking.
+  metric <- rank_df$stat
+  if (is.null(metric) || all(is.na(metric))) {
+    metric <- sign(rank_df$log2FoldChange) *
+      -log10(pmax(rank_df$pvalue, .Machine$double.xmin))
+  }
+  rank_df$metric <- metric
+  rank_df <- rank_df[is.finite(rank_df$metric), ]
   if (nrow(rank_df) >= 20) {
-    ranks <- sort(setNames(rank_df$stat, rank_df$entrez), decreasing = TRUE)
+    ranks <- sort(setNames(rank_df$metric, rank_df$entrez), decreasing = TRUE)
     gsea <- tryCatch(
       suppressWarnings(clusterProfiler::gseGO(
         geneList = ranks, OrgDb = orgdb, keyType = "ENTREZID", ont = ont,

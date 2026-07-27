@@ -38,8 +38,12 @@ compute_pca <- function(vsd, ntop = 500) {
 #' @param color_by Factor mapped to color (usually the tested variable).
 #' @param shape_by Optional factor mapped to shape (usually batch).
 #' @param outdir Output root; the plot is written under <outdir>/plots/.
+#' @param filename Output PNG name under <outdir>/plots/ (default "pca.png").
+#' @param save_scores If TRUE, also persist PCA scores for the interactive report
+#'   (only wanted for the primary PCA, not the batch-corrected variant).
 #' @return Path to the saved PNG.
-plot_pca <- function(pca_res, metadata, color_by, shape_by = NULL, outdir) {
+plot_pca <- function(pca_res, metadata, color_by, shape_by = NULL, outdir,
+                     filename = "pca.png", save_scores = TRUE) {
   df <- pca_res$scores
   # Bind metadata columns (avoid clobbering the existing 'sample' column).
   md <- metadata[match(df$sample, rownames(metadata)), , drop = FALSE]
@@ -64,21 +68,21 @@ plot_pca <- function(pca_res, metadata, color_by, shape_by = NULL, outdir) {
 
   plots_dir <- file.path(outdir, "plots")
   dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
-  path <- file.path(plots_dir, "pca.png")
+  path <- file.path(plots_dir, filename)
   ggplot2::ggsave(path, p, width = 7, height = 5.5, dpi = 150)
 
-  # Persist the scores + metadata + variance percentages so the HTML report can
-  # rebuild this as an INTERACTIVE plotly scatter (hover = sample id + group).
-  tables_dir <- file.path(outdir, "tables")
-  dir.create(tables_dir, recursive = TRUE, showWarnings = FALSE)
-  scores_out <- df[, unique(c("sample", grep("^PC[1-9]", colnames(df), value = TRUE),
-                              colnames(metadata)))]
-  attr(scores_out, "percentVar") <- pv
-  utils::write.table(scores_out, file.path(tables_dir, "pca_scores.tsv"),
-                     sep = "\t", quote = FALSE, row.names = FALSE)
-  # Variance percentages on their own line-oriented file (simple to read back).
-  writeLines(paste(pv, collapse = "\t"), file.path(tables_dir, "pca_percentvar.txt"))
-  log_success(sprintf("PCA plot saved to %s (+ interactive data in tables/)", path))
+  if (save_scores) {
+    # Persist the scores + metadata + variance percentages so the HTML report can
+    # rebuild this as an INTERACTIVE plotly scatter (hover = sample id + group).
+    tables_dir <- file.path(outdir, "tables")
+    dir.create(tables_dir, recursive = TRUE, showWarnings = FALSE)
+    scores_out <- df[, unique(c("sample", grep("^PC[1-9]", colnames(df), value = TRUE),
+                                colnames(metadata)))]
+    utils::write.table(scores_out, file.path(tables_dir, "pca_scores.tsv"),
+                       sep = "\t", quote = FALSE, row.names = FALSE)
+    writeLines(paste(pv, collapse = "\t"), file.path(tables_dir, "pca_percentvar.txt"))
+  }
+  log_success(sprintf("PCA plot saved to %s", path))
   path
 }
 

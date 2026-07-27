@@ -31,15 +31,24 @@ render_report <- function(cfg, outdir, run_timestamp, batch_vars = character(0),
     log_warn(sprintf("Report template not found at %s; skipping.", template)); return(invisible(NULL))
   }
 
-  out_html <- normalizePath(file.path(outdir, "report.html"), mustWork = FALSE)
+  out_dir_abs <- normalizePath(outdir, mustWork = FALSE)
+  dir.create(out_dir_abs, recursive = TRUE, showWarnings = FALSE)
   contrast_str <- sprintf("%s: %s vs %s", cfg$contrast[[1]], cfg$contrast[[2]], cfg$contrast[[3]])
+  # Render with explicit output_dir + a throwaway intermediates_dir. WHY: the Rmd
+  # lives under report/, and without these rmarkdown resolves output/intermediate
+  # paths relative to the template dir (or the shifting knit working dir), which
+  # fails when outdir is a relative path. Absolute dirs make it location-proof.
+  intermediates <- file.path(tempdir(), paste0("rmd_", run_timestamp))
 
   res <- tryCatch({
-    rmarkdown::render(
-      input = template,
-      output_file = out_html,
+    out <- rmarkdown::render(
+      input = normalizePath(template),
+      output_file = "report.html",
+      output_dir = out_dir_abs,
+      intermediates_dir = intermediates,
+      knit_root_dir = out_dir_abs,
       params = list(
-        outdir = normalizePath(outdir),
+        outdir = out_dir_abs,
         cfg = cfg,
         forced = forced,
         run_timestamp = run_timestamp,
@@ -47,7 +56,7 @@ render_report <- function(cfg, outdir, run_timestamp, batch_vars = character(0),
         contrast = contrast_str),
       envir = new.env(parent = globalenv()),  # isolate the render environment
       quiet = TRUE)
-    out_html
+    file.path(out_dir_abs, "report.html")
   }, error = function(e) {
     log_warn(sprintf("Report rendering failed: %s", conditionMessage(e))); NULL
   })

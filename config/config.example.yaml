@@ -1,5 +1,5 @@
 # =============================================================================
-# RNA-seq DE pipeline — example configuration
+# RNA-seq DE pipeline - example configuration
 # -----------------------------------------------------------------------------
 # Copy this file to config/config.yaml and edit. EVERY tunable parameter lives
 # here; the code contains no magic numbers. The pipeline echoes every resolved
@@ -7,7 +7,7 @@
 # =============================================================================
 
 # Global random seed. Set before anything stochastic (apeglm, some plotting).
-# WHY: deterministic re-runs — identical seed + identical renv.lock => identical
+# WHY: deterministic re-runs - identical seed + identical renv.lock => identical
 # DEG calls.
 seed: 42
 
@@ -16,7 +16,7 @@ seed: 42
 organism: human                       # human | mouse
 
 # Which count-input parser to use. `auto` inspects the file(s) and picks; any
-# explicit value forces that parser (and skips detection). See docs/USAGE.md §Inputs.
+# explicit value forces that parser (and skips detection). See docs/USAGE.md section Inputs.
 input_format: auto                    # auto | matrix | featurecounts | star | htseq | salmon | rangedSE
 
 # -----------------------------------------------------------------------------
@@ -34,7 +34,7 @@ design: "~ batch + condition"
 contrast: [condition, treated, control]
 
 # -----------------------------------------------------------------------------
-# QC thresholds — drive the loud PASS / WARN / FAIL engine (see R/qc.R)
+# QC thresholds - drive the loud PASS / WARN / FAIL engine (see R/qc.R)
 # -----------------------------------------------------------------------------
 qc:
   min_library_size: 1000000           # WARN if a sample's total counts fall below this

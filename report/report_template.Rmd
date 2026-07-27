@@ -105,6 +105,30 @@ tr.row-PASS td:first-child{ box-shadow:inset 4px 0 0 var(--pass);} tr.row-WARN t
 .legend{ font-size:13px; color:var(--muted); margin:8px 0 0; }
 .legend span{ display:inline-block; margin-right:14px; }
 .dot{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+/* ---- DataTables (DT) widgets: make them follow the page theme ------------- */
+/* Without this, DT ships its own light CSS and in dark mode the cells render as
+   dark text on the dark page background (the rows look "blacked out"). */
+.dataTables_wrapper{ color:var(--ink); margin:6px 0 10px; }
+table.dataTable{ background:var(--card); border-collapse:separate!important; }
+table.dataTable thead th{ color:var(--ink); border-bottom:2px solid var(--line); }
+table.dataTable tbody tr{ background:var(--card); }
+table.dataTable tbody td{ color:var(--ink); border-top:1px solid var(--line); }
+table.dataTable.stripe tbody tr.odd, table.dataTable.display tbody tr.odd{ background:rgba(127,127,127,.06); }
+table.dataTable tbody tr:hover, table.dataTable.hover tbody tr:hover{ background:rgba(79,70,229,.10); }
+.dataTables_wrapper .dataTables_filter input,
+.dataTables_wrapper .dataTables_length select{
+  background:var(--card); color:var(--ink); border:1px solid var(--line);
+  border-radius:6px; padding:3px 8px; }
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_paginate{ color:var(--muted)!important; }
+.dataTables_wrapper .dataTables_paginate .paginate_button{ color:var(--ink)!important; }
+.dataTables_wrapper .dataTables_paginate .paginate_button.current{
+  background:var(--accent)!important; color:#fff!important; border-radius:6px; border:none; }
+/* DT column-filter inputs (filter="top") */
+table.dataTable thead .form-control, .dataTables_scrollHead input{
+  background:var(--card); color:var(--ink); border:1px solid var(--line); }
 ```
 
 ```{r hero, results='asis'}
@@ -170,7 +194,7 @@ separate by biological condition; separation driven by batch is a red flag.
 *Hover any point for its sample id and group.*
 
 ```{r pca}
-# NOTE: htmlwidgets (plotly) must be RETURNED as the chunk value — not cat()'d —
+# NOTE: htmlwidgets (plotly) must be RETURNED as the chunk value -- not cat()'d --
 # so knitr's knit_print attaches the plotly.js dependency into the self-contained HTML.
 sc <- read_tsv_safe(p_pca_tsv)
 pv <- if (file.exists(p_pca_pv)) as.numeric(strsplit(readLines(p_pca_pv), "\t")[[1]]) else NULL
@@ -209,9 +233,9 @@ if (have_plotly && !is.null(vm) && ncol(vm) >= 1) {
   widget <- plotly::layout(
     plotly::plot_ly(x = colnames(m), y = rownames(m), z = m, type = "heatmap",
       colorscale = list(c(0,"#ffffff"), c(1,"#4f46e5")), zmin = 0, zmax = 1,
-      text = matrix(sprintf("%s / %s<br>R² = %.2f",
+      text = matrix(sprintf("%s / %s<br>R^2 = %.2f",
               rep(rownames(m), ncol(m)), rep(colnames(m), each = nrow(m)), m), nrow = nrow(m)),
-      hoverinfo = "text", colorbar = list(title = "R²")),
+      hoverinfo = "text", colorbar = list(title = "R^2")),
     xaxis = list(title = ""), yaxis = list(title = "", autorange = "reversed"))
 }
 if (!is.null(widget)) widget else if (file.exists(p_vm_png)) knitr::include_graphics(normalizePath(p_vm_png)) else knitr::asis_output("_Not available._")
@@ -276,14 +300,23 @@ if (!is.null(de)) {
   cols <- intersect(c("gene_id","symbol","baseMean","log2FoldChange","lfcSE","pvalue","padj","significant"), colnames(de))
   d <- de[, cols]; numc <- vapply(d, is.numeric, logical(1))
   d[numc] <- lapply(d[numc], function(x) signif(x, 4))
+  # Normalise the significance flag to the literal strings "TRUE"/"FALSE" so the
+  # styleEqual() row highlight matches regardless of how read.delim typed it.
+  if ("significant" %in% cols) d$significant <- ifelse(d$significant %in% c(TRUE, "TRUE"), "TRUE", "FALSE")
   if (have_DT) {
     dt <- DT::datatable(d, rownames = FALSE, filter = "top", extensions = "Buttons",
+      class = "stripe hover row-border",
       options = list(pageLength = 15, order = list(list(which(cols=="padj")-1, "asc")),
                      dom = "Bfrtip", buttons = c("copy","csv"), scrollX = TRUE),
-      caption = "Full DE results — search, sort, and export.")
+      caption = "Full DE results - search, sort, and export.")
     if ("significant" %in% cols)
       dt <- DT::formatStyle(dt, "significant", target = "row",
-             backgroundColor = DT::styleEqual(c("TRUE","FALSE"), c("rgba(79,70,229,.10)","transparent")))
+             backgroundColor = DT::styleEqual("TRUE", "rgba(79,70,229,.16)", default = ""),
+             fontWeight = DT::styleEqual("TRUE", "600", default = "normal"))
+    # Clean scientific display (3 sig figs) so tiny padj values don't show
+    # floating-point artifacts like 7.3199999e-132.
+    numcols <- intersect(c("baseMean","log2FoldChange","lfcSE","pvalue","padj"), cols)
+    dt <- DT::formatSignif(dt, columns = numcols, digits = 3)
     htmltools::tagList(dt)
   } else knitr::kable(head(d, 25), row.names = FALSE)
 }
@@ -302,7 +335,7 @@ if (file.exists(p_dot)) cat(img_tag(p_dot, "enrichment dotplot"))
 if (!is.null(ora) && nrow(ora) > 0) {
   cols <- intersect(c("ID","Description","GeneRatio","p.adjust","Count"), colnames(ora))
   d <- ora[, cols]; if ("p.adjust" %in% cols) d$p.adjust <- signif(d$p.adjust, 3)
-  if (have_DT) htmltools::tagList(DT::datatable(d, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE), caption = "ORA — over-represented GO terms"))
+  if (have_DT) htmltools::tagList(DT::datatable(d, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE), caption = "ORA - over-represented GO terms"))
   else knitr::kable(head(d, 15), row.names = FALSE)
 }
 ```
@@ -311,7 +344,7 @@ if (!is.null(ora) && nrow(ora) > 0) {
 if (!is.null(gsea) && nrow(gsea) > 0) {
   cols <- intersect(c("ID","Description","setSize","NES","p.adjust"), colnames(gsea))
   d <- gsea[, cols]; numc <- vapply(d, is.numeric, logical(1)); d[numc] <- lapply(d[numc], signif, 3)
-  if (have_DT) htmltools::tagList(DT::datatable(d, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE), caption = "GSEA — enriched gene sets"))
+  if (have_DT) htmltools::tagList(DT::datatable(d, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE), caption = "GSEA - enriched gene sets"))
   else knitr::kable(head(d, 15), row.names = FALSE)
 }
 ```

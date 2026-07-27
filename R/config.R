@@ -44,7 +44,17 @@ load_config <- function(path) {
       "Config file not found: '%s'. Copy config/config.example.yaml and edit it.",
       path))
   }
-  cfg <- yaml::read_yaml(path)
+  # Read through an explicit UTF-8 connection. WHY: Rscript often runs in the C
+  # locale (US-ASCII); a plain readLines() then chokes on any non-ASCII byte in
+  # the file and yaml silently returns NULL. A UTF-8-marked connection reads such
+  # files correctly regardless of the session locale.
+  con <- file(path, open = "r", encoding = "UTF-8")
+  on.exit(close(con), add = TRUE)
+  txt <- readLines(con, warn = FALSE)
+  cfg <- yaml::yaml.load(paste(txt, collapse = "\n"))
+  if (is.null(cfg)) {
+    stop_pipeline(sprintf("Config file '%s' is empty or not valid YAML.", path))
+  }
 
   # Check required fields exist (NULL = absent).
   missing <- .required_config_fields[
