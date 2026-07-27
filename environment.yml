@@ -37,5 +37,9 @@ dependencies:
   - r-knitr
   - r-testthat
   - r-renv
+  # --- interactive report widgets ---
+  - r-plotly
+  - r-dt
+  - r-htmlwidgets
   # --- report rendering ---
   - pandoc

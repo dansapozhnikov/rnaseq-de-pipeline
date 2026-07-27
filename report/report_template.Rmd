@@ -1,0 +1,330 @@
+---
+title: "RNA-seq Differential Expression Report"
+output:
+  html_document:
+    self_contained: true
+    theme: null
+    highlight: null
+    toc: true
+    toc_depth: 2
+    mathjax: null
+params:
+  outdir: "results"
+  cfg: NULL
+  forced: false
+  run_timestamp: ""
+  batch_vars: ""
+  contrast: ""
+---
+
+```{r setup, include=FALSE}
+# WHY this chunk: central config for every figure/table, artifact paths, and
+# graceful capability detection (plotly/DT power the interactive views; static
+# PNG/kable are the fallbacks so the report renders even without them).
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center")
+have_plotly <- requireNamespace("plotly", quietly = TRUE)
+have_DT     <- requireNamespace("DT", quietly = TRUE)
+
+outdir    <- params$outdir
+cfg       <- params$cfg
+p_qc      <- file.path(outdir, "qc", "qc_results.tsv")
+p_varmeta <- file.path(outdir, "qc", "variance_vs_metadata.tsv")
+p_pca_tsv <- file.path(outdir, "tables", "pca_scores.tsv")
+p_pca_pv  <- file.path(outdir, "tables", "pca_percentvar.txt")
+p_pca     <- file.path(outdir, "plots", "pca.png")
+p_pca_bc  <- file.path(outdir, "plots", "pca_batch_corrected.png")
+p_vm_png  <- file.path(outdir, "plots", "variance_vs_metadata.png")
+p_volcano <- file.path(outdir, "plots", "volcano.png")
+p_de      <- file.path(outdir, "tables", "de_results.tsv")
+p_ora     <- file.path(outdir, "tables", "enrichment_ora.tsv")
+p_gsea    <- file.path(outdir, "tables", "enrichment_gsea.tsv")
+p_dot     <- file.path(outdir, "plots", "enrichment_dotplot.png")
+
+read_tsv_safe  <- function(p, ...) if (file.exists(p)) utils::read.delim(p, check.names = FALSE, ...) else NULL
+img_tag <- function(p, alt = "") if (file.exists(p)) sprintf('<img src="%s" alt="%s" style="max-width:100%%;border-radius:8px;">\n', normalizePath(p), alt) else ""
+
+PAL <- list(up = "#e05252", down = "#3f7fbf", ns = "#c9ccd1",
+            pass = "#2e9e5b", warn = "#e0a800", fail = "#d64545")
+```
+
+```{css, echo=FALSE}
+/* ---- Design system: clean, modern, light/dark aware ---------------------- */
+:root{
+  --bg:#f6f8fb; --card:#ffffff; --ink:#1f2733; --muted:#5b6675; --line:#e4e8ef;
+  --accent:#4f46e5; --accent2:#0ea5e9;
+  --pass:#2e9e5b; --pass-bg:#e7f6ec; --warn:#e0a800; --warn-bg:#fdf6e3; --fail:#d64545; --fail-bg:#fdeaea;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0f141b; --card:#161d27; --ink:#e6eaf0; --muted:#9aa6b6; --line:#26303c;
+         --pass-bg:#12301f; --warn-bg:#302811; --fail-bg:#301616; }
+}
+body{ background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  line-height:1.55; }
+.main-container{ max-width:1080px; padding:0 22px 80px; margin:0 auto; }
+h1.title, .title{ display:none; } /* replaced by custom hero */
+/* table of contents styled as a clean card */
+#TOC{ background:var(--card); border:1px solid var(--line); border-radius:12px;
+  padding:14px 18px; margin:18px 0; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+#TOC ul{ list-style:none; padding-left:14px; margin:4px 0; }
+#TOC > ul{ padding-left:0; }
+#TOC li a{ text-decoration:none; color:var(--muted); }
+#TOC li a:hover{ color:var(--accent); }
+h1,h2,h3{ color:var(--ink); font-weight:680; letter-spacing:-0.01em; }
+h2{ margin-top:2.4em; padding-bottom:.3em; border-bottom:2px solid var(--line); }
+a{ color:var(--accent); }
+/* hero banner */
+.hero{ background:linear-gradient(120deg,var(--accent),var(--accent2)); color:#fff;
+  border-radius:16px; padding:26px 30px; margin:22px 0 8px; box-shadow:0 10px 30px rgba(79,70,229,.25); }
+.hero h1{ color:#fff; margin:0 0 6px; font-size:30px; }
+.hero .meta{ opacity:.95; font-size:14px; display:flex; flex-wrap:wrap; gap:18px; }
+.hero .meta b{ font-weight:700; }
+/* cards + stat tiles */
+.card{ background:var(--card); border:1px solid var(--line); border-radius:12px;
+  padding:16px 18px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+.tiles{ display:flex; flex-wrap:wrap; gap:14px; margin:14px 0; }
+.tile{ flex:1 1 150px; background:var(--card); border:1px solid var(--line);
+  border-radius:12px; padding:16px 18px; text-align:center; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+.tile .num{ font-size:34px; font-weight:780; line-height:1; }
+.tile .lab{ color:var(--muted); font-size:13px; margin-top:6px; text-transform:uppercase; letter-spacing:.04em; }
+.tile.pass .num{ color:var(--pass);} .tile.warn .num{ color:var(--warn);} .tile.fail .num{ color:var(--fail);}
+/* QC table */
+table.qc{ width:100%; border-collapse:separate; border-spacing:0; font-size:14px; overflow:hidden;
+  border-radius:12px; border:1px solid var(--line); }
+table.qc th{ background:var(--ink); color:var(--card); text-align:left; padding:10px 12px; font-weight:650; }
+table.qc td{ padding:10px 12px; border-top:1px solid var(--line); vertical-align:top; }
+table.qc tr:hover td{ filter:brightness(0.97); }
+.badge{ display:inline-block; padding:3px 10px; border-radius:999px; font-weight:700; font-size:12px; letter-spacing:.03em; }
+.badge.PASS{ background:var(--pass-bg); color:var(--pass);} .badge.WARN{ background:var(--warn-bg); color:var(--warn);} .badge.FAIL{ background:var(--fail-bg); color:var(--fail);}
+tr.row-PASS td:first-child{ box-shadow:inset 4px 0 0 var(--pass);} tr.row-WARN td:first-child{ box-shadow:inset 4px 0 0 var(--warn);} tr.row-FAIL td:first-child{ box-shadow:inset 4px 0 0 var(--fail);}
+/* hover-tooltip on check names */
+.tip{ border-bottom:1px dotted var(--muted); cursor:help; }
+.forced{ background:var(--fail); color:#fff; padding:14px 18px; border-radius:12px; font-weight:700;
+  box-shadow:0 8px 24px rgba(214,69,69,.35); margin:16px 0; }
+.note{ color:var(--muted); font-size:14px; }
+.legend{ font-size:13px; color:var(--muted); margin:8px 0 0; }
+.legend span{ display:inline-block; margin-right:14px; }
+.dot{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+```
+
+```{r hero, results='asis'}
+cat(sprintf('<div class="hero"><h1>RNA-seq Differential Expression Report</h1>
+<div class="meta"><span>&#128197; <b>%s</b></span><span>&#9878;&#65039; Contrast: <b>%s</b></span>
+<span>&#129516; Design: <b>%s</b></span><span>&#129440; %s</span></div></div>',
+  params$run_timestamp, params$contrast,
+  if (!is.null(cfg)) cfg$design else "", if (!is.null(cfg)) cfg$organism else ""))
+```
+
+```{r forced-banner, results='asis'}
+if (isTRUE(params$forced))
+  cat('<div class="forced">&#9888; THIS RUN WAS FORCED past one or more QC FAIL checks (--force). Interpret results with caution.</div>')
+```
+
+# QC panel
+
+The traffic-light panel is the run's quality gate. **Green = PASS**, **amber =
+WARN** (proceed, but review), **red = FAIL** (would stop the run without
+`--force`). Hover a check name for what it means.
+
+```{r qc-panel, results='asis'}
+qc <- read_tsv_safe(p_qc)
+# Short "why" tooltips for each known check.
+tips <- c(
+  sample_alignment      = "Do the count columns line up 1:1 with sample-sheet rows?",
+  raw_count_sanity      = "Are values non-negative integers (raw counts, not TPM/CPM)?",
+  library_size_floor    = "Hard floor on total reads per sample; below this a sample is unusable.",
+  library_size_min      = "Recommended minimum total reads per sample.",
+  genes_detected        = "Number of genes with >0 counts per sample.",
+  replicates_per_group  = "Replicates per group in the tested factor; DE needs >=2.",
+  design_identifiable   = "Is the model matrix full rank? Rank-deficient = a covariate is confounded.",
+  low_count_filter      = "Fraction of genes removed by the low-count filter.",
+  dispersion_fit        = "Sanity of the fitted dispersion trend.",
+  cooks_outliers        = "Samples with many high Cook's-distance genes (candidate outliers)."
+)
+if (is.null(qc)) { cat("_QC results not found._") } else {
+  n <- table(factor(qc$status, c("PASS","WARN","FAIL")))
+  cat('<div class="tiles">')
+  cat(sprintf('<div class="tile pass"><div class="num">%d</div><div class="lab">Pass</div></div>', n["PASS"]))
+  cat(sprintf('<div class="tile warn"><div class="num">%d</div><div class="lab">Warn</div></div>', n["WARN"]))
+  cat(sprintf('<div class="tile fail"><div class="num">%d</div><div class="lab">Fail</div></div>', n["FAIL"]))
+  cat('</div>')
+  cat('<table class="qc"><tr><th>Check</th><th>Status</th><th>Value</th><th>Details</th></tr>')
+  for (i in seq_len(nrow(qc))) {
+    s <- qc$status[i]; chk <- qc$check[i]
+    tip <- if (!is.na(tips[chk])) sprintf(' title="%s"', tips[chk]) else ""
+    cat(sprintf('<tr class="row-%s"><td><span class="tip"%s>%s</span></td>', s, tip, chk))
+    cat(sprintf('<td><span class="badge %s">%s</span></td>', s, s))
+    cat(sprintf('<td>%s</td><td>%s</td></tr>',
+                ifelse(is.na(qc$value[i]),"",qc$value[i]), ifelse(is.na(qc$message[i]),"",qc$message[i])))
+  }
+  cat('</table>')
+}
+```
+
+# Exploratory analysis
+
+## PCA
+
+PCA on the top-500 most variable variance-stabilized genes. Samples should
+separate by biological condition; separation driven by batch is a red flag.
+*Hover any point for its sample id and group.*
+
+```{r pca}
+# NOTE: htmlwidgets (plotly) must be RETURNED as the chunk value — not cat()'d —
+# so knitr's knit_print attaches the plotly.js dependency into the self-contained HTML.
+sc <- read_tsv_safe(p_pca_tsv)
+pv <- if (file.exists(p_pca_pv)) as.numeric(strsplit(readLines(p_pca_pv), "\t")[[1]]) else NULL
+color_by <- if (!is.null(cfg)) cfg$contrast[[1]] else NULL
+widget <- NULL
+if (have_plotly && !is.null(sc) && all(c("PC1","PC2") %in% colnames(sc)) && !is.null(color_by) && color_by %in% colnames(sc)) {
+  hover <- sprintf("<b>%s</b><br>%s: %s", sc$sample, color_by, sc[[color_by]])
+  args <- list(data = sc, x = ~PC1, y = ~PC2, type = "scatter", mode = "markers",
+               color = sc[[color_by]], text = hover, hoverinfo = "text",
+               marker = list(size = 13, line = list(width = 1, color = "#ffffff")))
+  bv <- if (nzchar(params$batch_vars)) trimws(strsplit(params$batch_vars, ",")[[1]])[1] else NA
+  if (!is.na(bv) && bv %in% colnames(sc)) args$symbol <- sc[[bv]]
+  widget <- plotly::layout(do.call(plotly::plot_ly, args),
+    xaxis = list(title = if (!is.null(pv)) sprintf("PC1: %s%% variance", pv[1]) else "PC1", zeroline = FALSE),
+    yaxis = list(title = if (!is.null(pv)) sprintf("PC2: %s%% variance", pv[2]) else "PC2", zeroline = FALSE),
+    legend = list(title = list(text = color_by)))
+}
+if (!is.null(widget)) widget else if (file.exists(p_pca)) knitr::include_graphics(normalizePath(p_pca)) else knitr::asis_output("_PCA not available._")
+```
+
+```{r pca-batch, results='asis'}
+if (file.exists(p_pca_bc)) { cat("**After batch correction (visualization only):**\n\n"); cat(img_tag(p_pca_bc, "PCA batch-corrected")) }
+```
+
+## Variance explained by metadata
+
+Each cell is the R² of a principal component regressed on a metadata variable —
+how much of that axis a variable explains. A technical variable dominating PC1
+indicates a batch effect (handled inside the DE design). *Hover for exact R².*
+
+```{r varmeta}
+vm <- read_tsv_safe(p_varmeta, row.names = 1)
+widget <- NULL
+if (have_plotly && !is.null(vm) && ncol(vm) >= 1) {
+  m <- as.matrix(vm)
+  widget <- plotly::layout(
+    plotly::plot_ly(x = colnames(m), y = rownames(m), z = m, type = "heatmap",
+      colorscale = list(c(0,"#ffffff"), c(1,"#4f46e5")), zmin = 0, zmax = 1,
+      text = matrix(sprintf("%s / %s<br>R² = %.2f",
+              rep(rownames(m), ncol(m)), rep(colnames(m), each = nrow(m)), m), nrow = nrow(m)),
+      hoverinfo = "text", colorbar = list(title = "R²")),
+    xaxis = list(title = ""), yaxis = list(title = "", autorange = "reversed"))
+}
+if (!is.null(widget)) widget else if (file.exists(p_vm_png)) knitr::include_graphics(normalizePath(p_vm_png)) else knitr::asis_output("_Not available._")
+```
+
+# Differential expression
+
+```{r de-summary, results='asis'}
+de <- read_tsv_safe(p_de)
+if (is.null(de)) { cat("_DE table not found._") } else {
+  sig <- de$significant %in% c(TRUE, "TRUE")
+  n_sig <- sum(sig, na.rm = TRUE)
+  n_up   <- sum(sig & de$log2FoldChange > 0, na.rm = TRUE)
+  n_down <- sum(sig & de$log2FoldChange < 0, na.rm = TRUE)
+  cat('<div class="tiles">')
+  cat(sprintf('<div class="tile"><div class="num">%d</div><div class="lab">Genes tested</div></div>', nrow(de)))
+  cat(sprintf('<div class="tile"><div class="num" style="color:%s">%d</div><div class="lab">Significant</div></div>', PAL$accent, n_sig))
+  cat(sprintf('<div class="tile"><div class="num" style="color:%s">%d</div><div class="lab">Up in %s</div></div>', PAL$up, n_up, cfg$contrast[[2]]))
+  cat(sprintf('<div class="tile"><div class="num" style="color:%s">%d</div><div class="lab">Down</div></div>', PAL$down, n_down))
+  cat('</div>')
+  cat(sprintf('<p class="note">Significance = padj &lt; %.3g <b>and</b> |log2FC| &ge; %.2g. Columns: <b>baseMean</b> mean normalized count; <b>log2FoldChange</b> shrunken log2(%s/%s); <b>lfcSE</b> its standard error; <b>padj</b> Benjamini-Hochberg adjusted p (use this for significance).</p>',
+      cfg$de$padj_cutoff, cfg$de$lfc_cutoff, cfg$contrast[[2]], cfg$contrast[[3]]))
+}
+```
+
+## Volcano
+
+*Interactive — hover any point for gene, fold-change and adjusted p; drag to zoom.*
+
+```{r volcano}
+widget <- NULL
+if (have_plotly && !is.null(de)) {
+  d <- de[!is.na(de$padj), ]
+  if (nrow(d)) {
+    d$neglog10 <- -log10(pmax(d$padj, .Machine$double.xmin))
+    sig <- d$significant %in% c(TRUE, "TRUE")
+    d$dir <- ifelse(sig & d$log2FoldChange > 0, "Up",
+              ifelse(sig & d$log2FoldChange < 0, "Down", "n.s."))
+    lab <- if ("symbol" %in% colnames(d)) ifelse(is.na(d$symbol) | d$symbol=="", d$gene_id, d$symbol) else d$gene_id
+    d$hover <- sprintf("<b>%s</b><br>log2FC: %.2f<br>padj: %.2g", lab, d$log2FoldChange, d$padj)
+    lfc <- cfg$de$lfc_cutoff; pcut <- -log10(cfg$de$padj_cutoff)
+    line <- function(x0,x1,y0,y1) list(type="line", x0=x0,x1=x1,y0=y0,y1=y1,
+        line=list(dash="dash", color="#9aa6b6", width=1))
+    rng <- range(d$log2FoldChange, na.rm = TRUE)
+    widget <- plotly::layout(
+      plotly::plot_ly(d, x = ~log2FoldChange, y = ~neglog10, color = ~dir,
+        colors = c(Up = PAL$up, Down = PAL$down, "n.s." = PAL$ns),
+        text = ~hover, hoverinfo = "text", type = "scatter", mode = "markers",
+        marker = list(size = 6, opacity = 0.75)),
+      xaxis = list(title = "log2 fold change"), yaxis = list(title = "-log10 adjusted p"),
+      shapes = list(line(-lfc,-lfc,0,max(d$neglog10)), line(lfc,lfc,0,max(d$neglog10)),
+                    line(rng[1],rng[2],pcut,pcut)))
+  }
+}
+if (!is.null(widget)) widget else if (file.exists(p_volcano)) knitr::include_graphics(normalizePath(p_volcano)) else knitr::asis_output("_Not available._")
+```
+
+## Top genes
+
+```{r de-table}
+if (!is.null(de)) {
+  cols <- intersect(c("gene_id","symbol","baseMean","log2FoldChange","lfcSE","pvalue","padj","significant"), colnames(de))
+  d <- de[, cols]; numc <- vapply(d, is.numeric, logical(1))
+  d[numc] <- lapply(d[numc], function(x) signif(x, 4))
+  if (have_DT) {
+    dt <- DT::datatable(d, rownames = FALSE, filter = "top", extensions = "Buttons",
+      options = list(pageLength = 15, order = list(list(which(cols=="padj")-1, "asc")),
+                     dom = "Bfrtip", buttons = c("copy","csv"), scrollX = TRUE),
+      caption = "Full DE results — search, sort, and export.")
+    if ("significant" %in% cols)
+      dt <- DT::formatStyle(dt, "significant", target = "row",
+             backgroundColor = DT::styleEqual(c("TRUE","FALSE"), c("rgba(79,70,229,.10)","transparent")))
+    htmltools::tagList(dt)
+  } else knitr::kable(head(d, 25), row.names = FALSE)
+}
+```
+
+# Functional enrichment
+
+```{r enrich-dot, results='asis'}
+ora <- read_tsv_safe(p_ora); gsea <- read_tsv_safe(p_gsea)
+if (is.null(ora) && is.null(gsea))
+  cat('<p class="note">Enrichment was disabled, produced no significant terms, or was skipped (see the run log).</p>')
+if (file.exists(p_dot)) cat(img_tag(p_dot, "enrichment dotplot"))
+```
+
+```{r ora-table}
+if (!is.null(ora) && nrow(ora) > 0) {
+  cols <- intersect(c("ID","Description","GeneRatio","p.adjust","Count"), colnames(ora))
+  d <- ora[, cols]; if ("p.adjust" %in% cols) d$p.adjust <- signif(d$p.adjust, 3)
+  if (have_DT) htmltools::tagList(DT::datatable(d, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE), caption = "ORA — over-represented GO terms"))
+  else knitr::kable(head(d, 15), row.names = FALSE)
+}
+```
+
+```{r gsea-table}
+if (!is.null(gsea) && nrow(gsea) > 0) {
+  cols <- intersect(c("ID","Description","setSize","NES","p.adjust"), colnames(gsea))
+  d <- gsea[, cols]; numc <- vapply(d, is.numeric, logical(1)); d[numc] <- lapply(d[numc], signif, 3)
+  if (have_DT) htmltools::tagList(DT::datatable(d, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE), caption = "GSEA — enriched gene sets"))
+  else knitr::kable(head(d, 15), row.names = FALSE)
+}
+```
+
+# Reproducibility
+
+```{r repro, results='asis'}
+cat('<div class="card">')
+cat(sprintf("<b>Seed:</b> %s<br>", if (!is.null(cfg)) cfg$seed else ""))
+cat(sprintf("<b>Run timestamp:</b> %s<br>", params$run_timestamp))
+cat(sprintf("<b>Organism / OrgDb:</b> %s<br>", if (!is.null(cfg)) cfg$organism else ""))
+cat(sprintf("<b>Batch variable(s):</b> %s<br>", ifelse(nzchar(params$batch_vars), params$batch_vars, "none")))
+cat(sprintf("<b>Full log + sessionInfo():</b> <code>%s</code><br>", file.path(outdir, "logs")))
+cat("<b>Exact package versions:</b> see <code>renv.lock</code> in the project root.")
+cat('</div>')
+```

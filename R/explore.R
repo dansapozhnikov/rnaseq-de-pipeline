@@ -66,7 +66,19 @@ plot_pca <- function(pca_res, metadata, color_by, shape_by = NULL, outdir) {
   dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
   path <- file.path(plots_dir, "pca.png")
   ggplot2::ggsave(path, p, width = 7, height = 5.5, dpi = 150)
-  log_success(sprintf("PCA plot saved to %s", path))
+
+  # Persist the scores + metadata + variance percentages so the HTML report can
+  # rebuild this as an INTERACTIVE plotly scatter (hover = sample id + group).
+  tables_dir <- file.path(outdir, "tables")
+  dir.create(tables_dir, recursive = TRUE, showWarnings = FALSE)
+  scores_out <- df[, unique(c("sample", grep("^PC[1-9]", colnames(df), value = TRUE),
+                              colnames(metadata)))]
+  attr(scores_out, "percentVar") <- pv
+  utils::write.table(scores_out, file.path(tables_dir, "pca_scores.tsv"),
+                     sep = "\t", quote = FALSE, row.names = FALSE)
+  # Variance percentages on their own line-oriented file (simple to read back).
+  writeLines(paste(pv, collapse = "\t"), file.path(tables_dir, "pca_percentvar.txt"))
+  log_success(sprintf("PCA plot saved to %s (+ interactive data in tables/)", path))
   path
 }
 
