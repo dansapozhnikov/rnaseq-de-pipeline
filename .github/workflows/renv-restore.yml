@@ -27,12 +27,23 @@ jobs:
           key: renv-${{ hashFiles('renv.lock') }}
           restore-keys: renv-
 
+      # Restore the locked packages into an EXPLICIT library, then run tests +
+      # validation against that library. We deliberately do NOT call
+      # renv::activate() (which would write renv/activate.R and make later Rscript
+      # calls auto-switch to a differently-computed project library) and we pass
+      # --no-init-file so the committed .Rprofile can't re-activate a different lib.
       - name: Restore exactly from renv.lock
         run: |
-          R -q -e 'install.packages("renv", repos = "https://cloud.r-project.org"); renv::activate(); renv::restore(prompt = FALSE)'
+          mkdir -p ci-lib
+          R -q -e 'install.packages("renv", repos = "https://cloud.r-project.org"); \
+                   renv::restore(lockfile = "renv.lock", library = "ci-lib", prompt = FALSE)'
 
       - name: Unit tests on the restored library
-        run: Rscript -e 'testthat::test_dir("tests/testthat", stop_on_failure = TRUE)'
+        env:
+          R_LIBS_USER: ci-lib
+        run: Rscript --no-init-file -e 'testthat::test_dir("tests/testthat", stop_on_failure = TRUE)'
 
       - name: Airway validation on the restored library
-        run: Rscript run_pipeline.R --validate --config config/config.example.yaml --outdir results/airway_validation
+        env:
+          R_LIBS_USER: ci-lib
+        run: Rscript --no-init-file run_pipeline.R --validate --config config/config.example.yaml --outdir results/airway_validation
