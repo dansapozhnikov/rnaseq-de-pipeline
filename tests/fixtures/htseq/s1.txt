@@ -1,0 +1,10 @@
+G1	100
+G2	0
+G3	50
+G4	200
+G5	10
+__no_feature	30
+__ambiguous	5
+__too_low_aQual	0
+__not_aligned	0
+__alignment_not_unique	0

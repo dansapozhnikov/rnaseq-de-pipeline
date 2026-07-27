@@ -1,0 +1,7 @@
+# Program:featureCounts v2.0.1; Command:...
+Geneid	Chr	Start	End	Strand	Length	s1	s2	s3	s4 
+G1	chr1	100	150	+	1001	100	120	5	8 
+G2	chr1	200	250	+	1002	0	2	300	280 
+G3	chr1	300	350	+	1003	50	60	40	45 
+G4	chr1	400	450	+	1004	200	180	20	25 
+G5	chr1	500	550	+	1005	10	12	500	520 

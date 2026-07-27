@@ -90,9 +90,11 @@ log_section <- function(title) {
 #' detect failure. `quit(status = 1)` guarantees the shell sees the failure.
 stop_pipeline <- function(msg) {
   log_error(msg)
-  # In interactive sessions stop() is friendlier (keeps the session alive);
-  # under Rscript we must quit non-zero so `--validate` and CI fail loudly.
-  if (interactive()) {
+  # In interactive sessions (or test mode) stop() is friendlier and, crucially,
+  # is CATCHABLE by testthat's expect_error(); under a real Rscript run we must
+  # quit non-zero so `--validate` and CI see the failure. Tests set
+  # options(pipeline.test_mode = TRUE).
+  if (interactive() || isTRUE(getOption("pipeline.test_mode"))) {
     stop(msg, call. = FALSE)
   } else {
     quit(save = "no", status = 1L)
