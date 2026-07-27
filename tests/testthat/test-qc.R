@@ -1,4 +1,4 @@
-# Unit tests for R/qc.R — severity mapping, threshold logic, and the gate.
+# Unit tests for R/qc.R -- severity mapping, threshold logic, and the gate.
 
 # Minimal config stub carrying just the QC thresholds the checks read.
 cfg <- list(qc = list(

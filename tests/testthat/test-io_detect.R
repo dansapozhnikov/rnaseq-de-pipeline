@@ -1,4 +1,4 @@
-# Unit tests for R/io_detect.R — one test per supported format plus the
+# Unit tests for R/io_detect.R -- one test per supported format plus the
 # guardrails (normalized-data rejection, sample reconciliation).
 
 # The reference matrix every fixture encodes (genes x samples), for equality checks.
