@@ -18,6 +18,7 @@ renv/sandbox/
 .RData
 .Rproj.user/
 *.Rproj
+Rplots.pdf
 
 # --- OS / editor --------------------------------------------------------------
 .DS_Store
