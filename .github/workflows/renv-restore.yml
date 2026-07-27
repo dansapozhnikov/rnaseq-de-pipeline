@@ -35,8 +35,7 @@ jobs:
       - name: Restore exactly from renv.lock
         run: |
           mkdir -p ci-lib
-          R -q -e 'install.packages("renv", repos = "https://cloud.r-project.org"); \
-                   renv::restore(lockfile = "renv.lock", library = "ci-lib", prompt = FALSE)'
+          R -q -e 'install.packages("renv", repos="https://cloud.r-project.org"); renv::restore(lockfile="renv.lock", library="ci-lib", prompt=FALSE)'
 
       - name: Unit tests on the restored library
         env:
