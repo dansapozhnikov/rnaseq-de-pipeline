@@ -1,0 +1,25 @@
+# --- Data & results are never committed (may be large or sensitive) -----------
+data/
+results/
+!results/.gitkeep
+
+# --- renv library is machine-specific; only renv.lock is committed ------------
+renv/library/
+renv/local/
+renv/staging/
+renv/python/
+renv/sandbox/
+
+# --- Logs ---------------------------------------------------------------------
+*.log
+
+# --- R session cruft ----------------------------------------------------------
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# --- OS / editor --------------------------------------------------------------
+.DS_Store
+*~
+.vscode/

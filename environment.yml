@@ -1,0 +1,41 @@
+# Conda alternative to renv for provisioning the pipeline's R/Bioconductor stack.
+# Pinned to Bioconductor 3.18 (R 4.3) to match renv.lock. Create with:
+#   conda env create -f environment.yml
+#   conda activate rnaseq-de
+# renv.lock remains the authoritative lockfile for exact reproducibility; this
+# file is a convenience for users who prefer conda-managed toolchains.
+name: rnaseq-de
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - r-base=4.3
+  # --- Bioconductor core ---
+  - bioconductor-deseq2=1.42
+  - bioconductor-apeglm=1.24
+  - bioconductor-limma=3.58
+  - bioconductor-tximport=1.30
+  - bioconductor-summarizedexperiment=1.32
+  - bioconductor-airway=1.22
+  - bioconductor-clusterprofiler=4.10
+  - bioconductor-org.hs.eg.db=3.18
+  - bioconductor-org.mm.eg.db=3.18
+  - bioconductor-enhancedvolcano=1.20
+  # --- CRAN ---
+  - r-matrixstats=1.5
+  - r-data.table
+  - r-readr
+  - r-ggplot2
+  - r-pheatmap
+  - r-optparse
+  - r-yaml
+  - r-cli
+  - r-crayon
+  - r-logger
+  - r-rmarkdown
+  - r-knitr
+  - r-testthat
+  - r-renv
+  # --- report rendering ---
+  - pandoc

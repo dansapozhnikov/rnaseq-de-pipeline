@@ -1,0 +1,69 @@
+# =============================================================================
+# RNA-seq DE pipeline — example configuration
+# -----------------------------------------------------------------------------
+# Copy this file to config/config.yaml and edit. EVERY tunable parameter lives
+# here; the code contains no magic numbers. The pipeline echoes every resolved
+# value to the log at startup, and FAILS clearly if a required field is missing.
+# =============================================================================
+
+# Global random seed. Set before anything stochastic (apeglm, some plotting).
+# WHY: deterministic re-runs — identical seed + identical renv.lock => identical
+# DEG calls.
+seed: 42
+
+# Organism selects the annotation database used for enrichment and ID mapping.
+#   human -> org.Hs.eg.db, mouse -> org.Mm.eg.db
+organism: human                       # human | mouse
+
+# Which count-input parser to use. `auto` inspects the file(s) and picks; any
+# explicit value forces that parser (and skips detection). See docs/USAGE.md §Inputs.
+input_format: auto                    # auto | matrix | featurecounts | star | htseq | salmon | rangedSE
+
+# -----------------------------------------------------------------------------
+# Experimental design
+# -----------------------------------------------------------------------------
+# A model formula in R syntax. The variable of interest MUST come LAST.
+# WHY: DESeq2 reports results for the last term by default, and putting nuisance
+# covariates (e.g. batch) first means their effect is regressed out before the
+# tested effect is estimated.
+design: "~ batch + condition"
+
+# The specific comparison to extract, as [factor, numerator, denominator].
+# log2FoldChange is reported as log2(numerator / denominator); the DENOMINATOR is
+# the reference level. Here: treated vs control, so positive LFC = up in treated.
+contrast: [condition, treated, control]
+
+# -----------------------------------------------------------------------------
+# QC thresholds — drive the loud PASS / WARN / FAIL engine (see R/qc.R)
+# -----------------------------------------------------------------------------
+qc:
+  min_library_size: 1000000           # WARN if a sample's total counts fall below this
+  min_library_size_fail: 100000       # FAIL (stop) below this hard floor
+  min_genes_detected: 8000            # WARN if a sample expresses fewer genes than this
+  min_replicates_per_group: 2         # FAIL if any group in the tested factor has fewer
+  min_count: 10                       # low-count gene filter: keep genes with >= this many
+                                      #   counts in >= min_replicates_per_group samples
+  max_pct_genes_filtered: 90          # WARN if the low-count filter removes more than this %
+  cooks_outlier: true                 # flag per-sample Cook's-distance outliers (WARN only)
+
+# -----------------------------------------------------------------------------
+# Differential expression
+# -----------------------------------------------------------------------------
+de:
+  padj_cutoff: 0.05                   # Benjamini-Hochberg adjusted p-value significance cut
+  lfc_cutoff: 1                       # |log2FoldChange| threshold for "biologically notable"
+  shrink: apeglm                      # LFC shrinkage estimator: apeglm | ashr | normal | none
+
+# -----------------------------------------------------------------------------
+# Functional enrichment (guarded: a missing OrgDb WARNs, never crashes)
+# -----------------------------------------------------------------------------
+enrichment:
+  enable: true
+  ontology: BP                        # GO ontology: BP | MF | CC
+  padj_cutoff: 0.05                   # significance cut for enriched terms
+
+# -----------------------------------------------------------------------------
+# Outputs
+# -----------------------------------------------------------------------------
+outputs:
+  outdir: results/                    # root for qc/, plots/, tables/, logs/, report
