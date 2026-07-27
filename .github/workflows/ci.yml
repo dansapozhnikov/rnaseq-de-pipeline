@@ -1,0 +1,69 @@
+name: CI
+
+# Build the container, run the unit tests + the airway positive-control end-to-end
+# INSIDE it (so the stack is installed once and the container itself is exercised),
+# upload the report, and publish the image to GHCR on pushes to master.
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (with layer cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: rnaseq-de-pipeline:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Unit tests (testthat, inside image)
+        run: |
+          docker run --rm --entrypoint Rscript rnaseq-de-pipeline:ci \
+            -e 'testthat::test_dir("tests/testthat", stop_on_failure = TRUE)'
+
+      - name: Airway positive control (end-to-end, inside image)
+        run: |
+          mkdir -p out
+          docker run --rm -v "$PWD/out:/out" rnaseq-de-pipeline:ci \
+            --validate --config config/config.example.yaml --outdir /out
+
+      - name: Upload airway report + artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: airway-validation
+          path: out
+          if-no-files-found: warn
+
+      # Publish to GitHub Container Registry only on pushes to master / tags.
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag & push image
+        if: github.event_name == 'push'
+        run: |
+          IMG=ghcr.io/dansapozhnikov/rnaseq-de-pipeline
+          docker tag rnaseq-de-pipeline:ci "$IMG:latest"
+          docker tag rnaseq-de-pipeline:ci "$IMG:${GITHUB_SHA::7}"
+          docker push "$IMG:latest"
+          docker push "$IMG:${GITHUB_SHA::7}"

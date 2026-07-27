@@ -1,5 +1,8 @@
 # rnaseq-de-pipeline
 
+[![CI](https://github.com/dansapozhnikov/rnaseq-de-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/dansapozhnikov/rnaseq-de-pipeline/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A **reproducible, production-grade bulk RNA-seq differential-expression (DE)
 pipeline** in R (DESeq2). It takes a raw gene-level count matrix + a sample sheet
 through QC → normalization → exploratory analysis (PCA) → outlier & batch

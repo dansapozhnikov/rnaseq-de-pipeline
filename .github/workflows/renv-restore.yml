@@ -1,0 +1,38 @@
+name: renv-restore audit
+
+# Proves the committed renv.lock actually restores from scratch on Linux and that
+# the restored environment passes the tests + airway validation. This is the
+# "clean-checkout reproducibility" check. It is expensive (compiles the stack), so
+# it runs weekly and on demand rather than on every push (the per-push CI uses the
+# container image instead).
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'   # Mondays 06:00 UTC
+
+env:
+  RENV_PATHS_CACHE: ~/.cache/R/renv
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    container: bioconductor/bioconductor_docker:RELEASE_3_18
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache renv packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/R/renv
+          key: renv-${{ hashFiles('renv.lock') }}
+          restore-keys: renv-
+
+      - name: Restore exactly from renv.lock
+        run: |
+          R -q -e 'install.packages("renv", repos = "https://cloud.r-project.org"); renv::activate(); renv::restore(prompt = FALSE)'
+
+      - name: Unit tests on the restored library
+        run: Rscript -e 'testthat::test_dir("tests/testthat", stop_on_failure = TRUE)'
+
+      - name: Airway validation on the restored library
+        run: Rscript run_pipeline.R --validate --config config/config.example.yaml --outdir results/airway_validation
