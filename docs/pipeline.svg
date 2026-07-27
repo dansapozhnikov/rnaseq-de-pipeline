@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1180" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5b6675"/>
+    </marker>
+    <style>
+      .stage { fill:#ffffff; stroke:#4f46e5; stroke-width:2; rx:12; }
+      .io    { fill:#eef2ff; stroke:#4f46e5; stroke-width:2; rx:12; }
+      .explore { fill:#ecfeff; stroke:#0ea5e9; stroke-width:2; rx:12; }
+      .out   { fill:#f0fdf4; stroke:#2e9e5b; stroke-width:2; rx:12; }
+      .title { font-size:16px; font-weight:700; fill:#1f2733; }
+      .lbl   { font-size:14px; font-weight:650; fill:#1f2733; }
+      .sub   { font-size:11.5px; fill:#5b6675; }
+      .edge  { stroke:#5b6675; stroke-width:2; fill:none; }
+      .elabel{ font-size:11px; font-weight:700; }
+      .pass  { fill:#2e9e5b; } .fail { fill:#d64545; } .warn { fill:#e0a800; }
+    </style>
+  </defs>
+
+  <!-- White canvas so the dark text/boxes stay readable on any viewer theme. -->
+  <rect x="0" y="0" width="900" height="1180" fill="#ffffff"/>
+  <text x="450" y="34" text-anchor="middle" class="title">Bulk RNA-seq Differential-Expression Pipeline</text>
+
+  <!-- Input -->
+  <rect class="io" x="300" y="56" width="300" height="58" rx="12"/>
+  <text x="450" y="80" text-anchor="middle" class="lbl">Input counts (multi-format)</text>
+  <text x="450" y="99" text-anchor="middle" class="sub">matrix | featureCounts | STAR | HTSeq | Salmon | rangedSE</text>
+
+  <!-- Load & align -->
+  <rect class="stage" x="300" y="146" width="300" height="58" rx="12"/>
+  <text x="450" y="170" text-anchor="middle" class="lbl">Load &amp; align to sample sheet</text>
+  <text x="450" y="189" text-anchor="middle" class="sub">auto-detect format; reconcile IDs (FAIL on mismatch)</text>
+
+  <!-- QC gate (decision diamond) -->
+  <polygon points="450,236 620,326 450,416 280,326" fill="#fdf6e3" stroke="#e0a800" stroke-width="2"/>
+  <text x="450" y="312" text-anchor="middle" class="lbl">QC gate</text>
+  <text x="450" y="331" text-anchor="middle" class="sub">alignment, library size, replicates,</text>
+  <text x="450" y="347" text-anchor="middle" class="sub">design identifiability ...</text>
+
+  <!-- Stop node (FAIL branch) -->
+  <rect x="690" y="297" width="180" height="58" rx="12" fill="#fdeaea" stroke="#d64545" stroke-width="2"/>
+  <text x="780" y="321" text-anchor="middle" class="lbl fail">STOP &#8212; exit 1</text>
+  <text x="780" y="340" text-anchor="middle" class="sub">writes QC report first</text>
+
+  <!-- Filter -->
+  <rect class="stage" x="300" y="448" width="300" height="52" rx="12"/>
+  <text x="450" y="472" text-anchor="middle" class="lbl">Filter low-count genes</text>
+  <text x="450" y="490" text-anchor="middle" class="sub">keep >= min_count in >= min replicates</text>
+
+  <!-- Normalize -->
+  <rect class="stage" x="300" y="532" width="300" height="52" rx="12"/>
+  <text x="450" y="556" text-anchor="middle" class="lbl">Normalize &amp; fit (DESeq2)</text>
+  <text x="450" y="574" text-anchor="middle" class="sub">size factors, dispersions, NB GLM; VST for viz</text>
+
+  <!-- Explore -->
+  <rect class="explore" x="300" y="616" width="300" height="52" rx="12"/>
+  <text x="450" y="640" text-anchor="middle" class="lbl">PCA + variance-vs-metadata</text>
+  <text x="450" y="658" text-anchor="middle" class="sub">detect structure &amp; batch effects</text>
+
+  <!-- Batch -->
+  <rect class="explore" x="300" y="700" width="300" height="52" rx="12"/>
+  <text x="450" y="724" text-anchor="middle" class="lbl">Outlier &amp; batch handling</text>
+  <text x="450" y="742" text-anchor="middle" class="sub">Cook's outliers (WARN); removeBatchEffect (viz only)</text>
+
+  <!-- DE -->
+  <rect class="stage" x="300" y="784" width="300" height="52" rx="12"/>
+  <text x="450" y="808" text-anchor="middle" class="lbl">Differential expression</text>
+  <text x="450" y="826" text-anchor="middle" class="sub">contrast, apeglm shrinkage, padj &amp; LFC thresholds</text>
+
+  <!-- Enrichment -->
+  <rect class="stage" x="300" y="868" width="300" height="52" rx="12"/>
+  <text x="450" y="892" text-anchor="middle" class="lbl">Functional enrichment</text>
+  <text x="450" y="910" text-anchor="middle" class="sub">GO ORA + GSEA (guarded)</text>
+
+  <!-- Report -->
+  <rect class="out" x="300" y="952" width="300" height="58" rx="12"/>
+  <text x="450" y="976" text-anchor="middle" class="lbl">Report &amp; outputs</text>
+  <text x="450" y="995" text-anchor="middle" class="sub">interactive HTML, DE table, plots, QC TSV, logs</text>
+
+  <!-- Reproducibility footer -->
+  <rect x="230" y="1052" width="440" height="72" rx="12" fill="#f6f8fb" stroke="#e4e8ef" stroke-width="1.5"/>
+  <text x="450" y="1078" text-anchor="middle" class="lbl">Reproducibility spine</text>
+  <text x="450" y="1098" text-anchor="middle" class="sub">fixed seed &#183; renv.lock &#183; config-driven params</text>
+  <text x="450" y="1114" text-anchor="middle" class="sub">sessionInfo() + tee'd logs captured every run</text>
+
+  <!-- Edges -->
+  <path class="edge" d="M450,114 L450,146" marker-end="url(#arrow)"/>
+  <path class="edge" d="M450,204 L450,236" marker-end="url(#arrow)"/>
+  <!-- FAIL branch -->
+  <path class="edge" d="M620,326 L690,326" marker-end="url(#arrow)" stroke="#d64545"/>
+  <text x="655" y="318" text-anchor="middle" class="elabel fail">FAIL</text>
+  <!-- PASS/WARN continue -->
+  <path class="edge" d="M450,416 L450,448" marker-end="url(#arrow)" stroke="#2e9e5b"/>
+  <text x="482" y="436" class="elabel pass">PASS</text>
+  <text x="486" y="436" class="elabel warn" dx="34">/WARN</text>
+  <path class="edge" d="M450,500 L450,532" marker-end="url(#arrow)"/>
+  <path class="edge" d="M450,584 L450,616" marker-end="url(#arrow)"/>
+  <path class="edge" d="M450,668 L450,700" marker-end="url(#arrow)"/>
+  <path class="edge" d="M450,752 L450,784" marker-end="url(#arrow)"/>
+  <path class="edge" d="M450,836 L450,868" marker-end="url(#arrow)"/>
+  <path class="edge" d="M450,920 L450,952" marker-end="url(#arrow)"/>
+  <path class="edge" d="M450,1010 L450,1052" marker-end="url(#arrow)" stroke-dasharray="4 4"/>
+</svg>

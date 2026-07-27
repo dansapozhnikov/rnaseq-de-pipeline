@@ -102,14 +102,33 @@ variance_vs_metadata <- function(pca_res, metadata, npc = 5, outdir) {
   npc <- min(npc, sum(grepl("^PC", colnames(scores))))
   pcs <- paste0("PC", seq_len(npc))
   md <- metadata[match(scores$sample, rownames(metadata)), , drop = FALSE]
-  # Only test variables with >1 level (constants explain nothing).
-  vars <- colnames(md)[vapply(md, function(x) length(unique(x)) > 1, logical(1))]
+  n <- nrow(md)
+
+  # Keep only INFORMATIVE variables. WHY: a metadata column that is a per-sample
+  # unique identifier (SampleName, Run, BioSample, ...) has one level per sample,
+  # so regressing any PC on it fits perfectly (R^2 = 1) and tells us nothing about
+  # structure. We therefore drop constants (1 level) AND identifiers (n levels),
+  # keeping genuine experimental/technical factors and continuous covariates.
+  informative <- function(x) {
+    u <- length(unique(x[!is.na(x)]))
+    is.numeric(x) && u > 1 || (u > 1 && u < n)
+  }
+  vars <- colnames(md)[vapply(md, informative, logical(1))]
   vars <- setdiff(vars, "sample")
+  if (length(vars) == 0) {
+    log_warn("No informative metadata variables for variance-vs-metadata; skipping.")
+    return(list(assoc = NULL, plot = NULL, table = NULL))
+  }
 
   assoc <- matrix(NA_real_, nrow = length(pcs), ncol = length(vars),
                   dimnames = list(pcs, vars))
   for (pc in pcs) for (v in vars) {
-    fit <- stats::lm(scores[[pc]] ~ factor(md[[v]]))
+    # Continuous covariates enter the model as-is; categorical ones as factors.
+    # Coercing a continuous variable to a factor would give it n-1 dummy columns
+    # and again trivially inflate R^2, so we branch on type.
+    xv <- md[[v]]
+    predictor <- if (is.numeric(xv)) xv else factor(xv)
+    fit <- stats::lm(scores[[pc]] ~ predictor)
     assoc[pc, v] <- summary(fit)$r.squared
   }
 

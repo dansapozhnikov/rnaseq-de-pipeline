@@ -88,17 +88,27 @@ a{ color:var(--accent); }
 .tile .num{ font-size:34px; font-weight:780; line-height:1; }
 .tile .lab{ color:var(--muted); font-size:13px; margin-top:6px; text-transform:uppercase; letter-spacing:.04em; }
 .tile.pass .num{ color:var(--pass);} .tile.warn .num{ color:var(--warn);} .tile.fail .num{ color:var(--fail);}
-/* QC table */
-table.qc{ width:100%; border-collapse:separate; border-spacing:0; font-size:14px; overflow:hidden;
+/* QC table -- overflow:visible so the custom hover tooltip is not clipped;
+   corners are rounded on the header cells directly instead. */
+table.qc{ width:100%; border-collapse:separate; border-spacing:0; font-size:14px;
   border-radius:12px; border:1px solid var(--line); }
 table.qc th{ background:var(--ink); color:var(--card); text-align:left; padding:10px 12px; font-weight:650; }
+table.qc th:first-child{ border-top-left-radius:11px; } table.qc th:last-child{ border-top-right-radius:11px; }
 table.qc td{ padding:10px 12px; border-top:1px solid var(--line); vertical-align:top; }
 table.qc tr:hover td{ filter:brightness(0.97); }
 .badge{ display:inline-block; padding:3px 10px; border-radius:999px; font-weight:700; font-size:12px; letter-spacing:.03em; }
 .badge.PASS{ background:var(--pass-bg); color:var(--pass);} .badge.WARN{ background:var(--warn-bg); color:var(--warn);} .badge.FAIL{ background:var(--fail-bg); color:var(--fail);}
 tr.row-PASS td:first-child{ box-shadow:inset 4px 0 0 var(--pass);} tr.row-WARN td:first-child{ box-shadow:inset 4px 0 0 var(--warn);} tr.row-FAIL td:first-child{ box-shadow:inset 4px 0 0 var(--fail);}
-/* hover-tooltip on check names */
-.tip{ border-bottom:1px dotted var(--muted); cursor:help; }
+/* Instant, styled hover tooltip on check names (native title[] is slow + clipped). */
+.tip{ position:relative; border-bottom:1px dotted var(--muted); cursor:help; }
+.tip:hover::after{
+  content:attr(data-tip); position:absolute; left:0; top:150%; z-index:60;
+  width:270px; white-space:normal; background:#1f2733; color:#fff;
+  font-size:12.5px; font-weight:500; line-height:1.45; padding:9px 11px;
+  border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.30); pointer-events:none; }
+.tip:hover::before{
+  content:""; position:absolute; left:12px; top:135%; z-index:61;
+  border:6px solid transparent; border-bottom-color:#1f2733; pointer-events:none; }
 .forced{ background:var(--fail); color:#fff; padding:14px 18px; border-radius:12px; font-weight:700;
   box-shadow:0 8px 24px rgba(214,69,69,.35); margin:16px 0; }
 .note{ color:var(--muted); font-size:14px; }
@@ -175,8 +185,9 @@ if (is.null(qc)) { cat("_QC results not found._") } else {
   cat('<table class="qc"><tr><th>Check</th><th>Status</th><th>Value</th><th>Details</th></tr>')
   for (i in seq_len(nrow(qc))) {
     s <- qc$status[i]; chk <- qc$check[i]
-    tip <- if (!is.na(tips[chk])) sprintf(' title="%s"', tips[chk]) else ""
-    cat(sprintf('<tr class="row-%s"><td><span class="tip"%s>%s</span></td>', s, tip, chk))
+    tip <- if (!is.na(tips[chk])) sprintf(' data-tip="%s"', tips[chk]) else ""
+    cls <- if (nzchar(tip)) "tip" else ""
+    cat(sprintf('<tr class="row-%s"><td><span class="%s"%s>%s</span></td>', s, cls, tip, chk))
     cat(sprintf('<td><span class="badge %s">%s</span></td>', s, s))
     cat(sprintf('<td>%s</td><td>%s</td></tr>',
                 ifelse(is.na(qc$value[i]),"",qc$value[i]), ifelse(is.na(qc$message[i]),"",qc$message[i])))
@@ -274,8 +285,8 @@ if (have_plotly && !is.null(de)) {
     sig <- d$significant %in% c(TRUE, "TRUE")
     d$dir <- ifelse(sig & d$log2FoldChange > 0, "Up",
               ifelse(sig & d$log2FoldChange < 0, "Down", "n.s."))
-    lab <- if ("symbol" %in% colnames(d)) ifelse(is.na(d$symbol) | d$symbol=="", d$gene_id, d$symbol) else d$gene_id
-    d$hover <- sprintf("<b>%s</b><br>log2FC: %.2f<br>padj: %.2g", lab, d$log2FoldChange, d$padj)
+    d$lab <- if ("symbol" %in% colnames(d)) ifelse(is.na(d$symbol) | d$symbol=="", d$gene_id, d$symbol) else d$gene_id
+    d$hover <- sprintf("<b>%s</b><br>log2FC: %.2f<br>padj: %.2g", d$lab, d$log2FoldChange, d$padj)
     lfc <- cfg$de$lfc_cutoff; pcut <- -log10(cfg$de$padj_cutoff)
     line <- function(x0,x1,y0,y1) list(type="line", x0=x0,x1=x1,y0=y0,y1=y1,
         line=list(dash="dash", color="#9aa6b6", width=1))
@@ -288,6 +299,12 @@ if (have_plotly && !is.null(de)) {
       xaxis = list(title = "log2 fold change"), yaxis = list(title = "-log10 adjusted p"),
       shapes = list(line(-lfc,-lfc,0,max(d$neglog10)), line(lfc,lfc,0,max(d$neglog10)),
                     line(rng[1],rng[2],pcut,pcut)))
+    # Label the top genes by significance so notable hits are visible at a glance
+    # (every gene is still discoverable via hover and the searchable table below).
+    topn <- head(d[order(d$padj), ], 12)
+    widget <- plotly::add_annotations(widget, data = topn, x = ~log2FoldChange, y = ~neglog10,
+        text = ~lab, showarrow = TRUE, arrowhead = 0, arrowwidth = 0.6, arrowcolor = "#9aa6b6",
+        ax = 18, ay = -14, font = list(size = 10, color = "#5b6675"))
   }
 }
 if (!is.null(widget)) widget else if (file.exists(p_volcano)) knitr::include_graphics(normalizePath(p_volcano)) else knitr::asis_output("_Not available._")
