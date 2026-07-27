@@ -53,6 +53,18 @@ de:
   padj_cutoff: 0.05                   # Benjamini-Hochberg adjusted p-value significance cut
   lfc_cutoff: 1                       # |log2FoldChange| threshold for "biologically notable"
   shrink: apeglm                      # LFC shrinkage estimator: apeglm | ashr | normal | none
+  test: Wald                          # Wald (per-coefficient/contrast) | LRT (likelihood-ratio:
+                                      #   full vs reduced model; use for multi-level factors,
+                                      #   time courses, ANOVA-style questions)
+  reduced: null                       # reduced-model formula (string), REQUIRED when test: LRT,
+                                      #   e.g. "~ batch" for a full design of "~ batch + condition"
+  contrasts: null                     # OPTIONAL additional results beyond `contrast` above, as a
+                                      #   list. Each item is either a [factor, numerator, denominator]
+                                      #   vector, or a mapping {name, coef} to pull an INTERACTION /
+                                      #   arbitrary coefficient by its resultsNames() label. Example:
+                                      #   contrasts:
+                                      #     - [condition, other, control]
+                                      #     - {name: batchB_effect, coef: batch_B_vs_A}
 
 # -----------------------------------------------------------------------------
 # Exploratory analysis (PCA)

@@ -64,13 +64,28 @@ filter_low_counts <- function(dds, cfg) {
 }
 
 #' Fit the DESeq2 model (size factors, dispersions, negative-binomial GLM).
+#'
+#' @param dds A DESeqDataSet.
+#' @param test "Wald" (default) or "LRT".
+#' @param reduced Reduced-model formula string; REQUIRED when test="LRT".
 #' @return A fitted DESeqDataSet.
-#' This single call estimates library size factors (median-of-ratios), fits the
-#' dispersion-mean trend, and fits the GLM for each gene. Raw counts in, model out.
-run_deseq <- function(dds) {
-  log_info("Fitting DESeq2 model (size factors -> dispersions -> NB GLM)...")
-  dds <- DESeq2::DESeq(dds)
-  log_success(sprintf("Model fitted. Size factors: %s",
+#' Wald tests a single coefficient/contrast (good for two-group comparisons and
+#' specific effects). LRT (likelihood-ratio test) compares the full design to a
+#' `reduced` one and tests the SET of terms dropped in a single p-value -- the
+#' right tool for multi-level factors, time courses, and ANOVA-style questions.
+run_deseq <- function(dds, test = "Wald", reduced = NULL) {
+  test <- match.arg(test, c("Wald", "LRT"))
+  if (test == "LRT") {
+    if (is.null(reduced)) {
+      stop_pipeline("de$test is 'LRT' but de$reduced (the reduced-model formula) is not set.")
+    }
+    log_info(sprintf("Fitting DESeq2 (LRT: full design vs reduced '%s')...", reduced))
+    dds <- DESeq2::DESeq(dds, test = "LRT", reduced = stats::as.formula(reduced))
+  } else {
+    log_info("Fitting DESeq2 model (Wald: size factors -> dispersions -> NB GLM)...")
+    dds <- DESeq2::DESeq(dds)
+  }
+  log_success(sprintf("Model fitted (%s). Size factors: %s", test,
                      paste(sprintf("%s=%.2f", names(DESeq2::sizeFactors(dds)),
                                    DESeq2::sizeFactors(dds)), collapse = ", ")))
   dds

@@ -450,6 +450,28 @@ if (!is.null(de)) {
 }
 ```
 
+```{r extra-contrasts, results='asis'}
+# Additional contrasts (only present when de$contrasts was set). Discovered by
+# globbing de_results_*.tsv so the report needs no extra parameters. The primary
+# contrast above is de_results.tsv (no suffix) and is excluded here.
+extra <- list.files(file.path(outdir, "tables"), pattern = "^de_results_.+\\.tsv$", full.names = TRUE)
+if (length(extra)) {
+  cat('<h1>Additional contrasts</h1>')
+  cat(sprintf('<p class="note">This run requested %d additional comparison(s) beyond the primary contrast. Each has its own full table (<code>tables/</code>) and volcano (<code>plots/</code>).</p>', length(extra)))
+  for (f in extra) {
+    nm <- sub("^de_results_(.+)\\.tsv$", "\\1", basename(f))
+    d2 <- read_tsv_safe(f); if (is.null(d2)) next
+    s2 <- d2$significant %in% c(TRUE, "TRUE")
+    up <- sum(s2 & d2$log2FoldChange > 0, na.rm = TRUE); dn <- sum(s2 & d2$log2FoldChange < 0, na.rm = TRUE)
+    png <- file.path(outdir, "plots", sprintf("volcano_%s.png", nm))
+    cat(sprintf('<div class="card"><b>%s</b> &mdash; %d significant (%d up, %d down) of %d tested.<br>',
+                nm, sum(s2, na.rm = TRUE), up, dn, nrow(d2)))
+    if (file.exists(png)) cat(img_tag(png, nm))
+    cat('</div>')
+  }
+}
+```
+
 # Functional enrichment
 
 ```{r enrich-dot, results='asis'}

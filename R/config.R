@@ -81,6 +81,15 @@ load_config <- function(path) {
       length(cfg$contrast)))
   }
 
+  # LRT requires a reduced model; fail fast rather than deep in the fit.
+  test <- cfg$de$test %||% "Wald"
+  if (!test %in% c("Wald", "LRT")) {
+    stop_pipeline(sprintf("config$de$test must be 'Wald' or 'LRT', got '%s'.", test))
+  }
+  if (test == "LRT" && is.null(cfg$de$reduced)) {
+    stop_pipeline("config$de$test is 'LRT' but config$de$reduced (reduced-model formula) is missing.")
+  }
+
   cfg
 }
 
@@ -107,6 +116,11 @@ echo_config <- function(cfg) {
   log_info(sprintf("de.padj_cutoff / lfc     : %s / %s",
                    cfg$de$padj_cutoff, cfg$de$lfc_cutoff))
   log_info(sprintf("de.shrink                : %s", cfg$de$shrink))
+  log_info(sprintf("de.test                  : %s%s", cfg$de$test %||% "Wald",
+                   if (identical(cfg$de$test, "LRT")) sprintf(" (reduced: %s)", cfg$de$reduced) else ""))
+  if (!is.null(cfg$de$contrasts)) {
+    log_info(sprintf("de.contrasts (extra)     : %d additional result(s)", length(cfg$de$contrasts)))
+  }
   log_info(sprintf("enrichment               : enable=%s ontology=%s",
                    cfg$enrichment$enable, cfg$enrichment$ontology))
   log_info(sprintf("outputs.outdir           : %s", cfg$outputs$outdir))

@@ -239,6 +239,9 @@ missing required field is a clear startup error. Keep the file ASCII.
 | `de.padj_cutoff` | BH-adjusted p significance cut (also DESeq2 `alpha`). | `0.05` |
 | `de.lfc_cutoff` | \|log2FC\| threshold for "biologically notable". | `1` |
 | `de.shrink` | LFC shrinkage: `apeglm` / `ashr` / `normal` / `none`. | `apeglm` |
+| `de.test` | `Wald` (per-coefficient/contrast) or `LRT` (likelihood-ratio, full vs reduced — for multi-level factors / time courses). | `Wald` |
+| `de.reduced` | Reduced-model formula string; **required** when `de.test: LRT` (e.g. `"~ batch"`). | `null` |
+| `de.contrasts` | Optional list of *additional* results beyond `contrast`: each a `[factor, num, denom]` vector or a `{name, coef}` mapping (a `resultsNames()` coefficient — how you pull an interaction effect). Each gets its own DE table + volcano. | `null` |
 | `explore.pca_ntop` | # most-variable genes for PCA. 500 = DESeq2 `plotPCA()` convention (not a hard best practice); 1000–2000 broadens it; a very large value ≈ all genes. | `500` |
 | `enrichment.enable` | Run GO ORA + GSEA. | `true` |
 | `enrichment.ontology` | GO ontology: `BP` / `MF` / `CC`. | `BP` |

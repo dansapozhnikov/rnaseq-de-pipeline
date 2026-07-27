@@ -73,7 +73,7 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
   dds <- build_dds(counts, metadata, cfg$design, cfg$contrast)
   flt <- filter_low_counts(dds, cfg)
   qc_check_low_count_filter(qc, flt$n_before, flt$n_after, cfg)
-  dds <- run_deseq(flt$dds)
+  dds <- run_deseq(flt$dds, test = cfg$de$test %||% "Wald", reduced = cfg$de$reduced)
   qc_check_dispersion(qc, dds)
 
   # ===========================================================================
@@ -111,17 +111,31 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
   qc_check_cooks_outliers(qc, dds, cfg)
 
   # ===========================================================================
-  # Differential expression
+  # Differential expression -- one or more result specs (contrasts / coefficients)
   # ===========================================================================
   log_section("Differential expression")
-  res <- run_results(dds, cfg$contrast, cfg)
-  res <- shrink_lfc(dds, cfg$contrast, res, cfg$de$shrink)
-  de_df <- annotate_results(res, cfg$organism)
-  detab <- build_de_table(de_df, cfg, outdir)
-  plot_volcano(detab$table, cfg, outdir)
+  specs <- resolve_result_specs(cfg)
+  log_info(sprintf("Extracting %d result(s): %s", length(specs),
+                   paste(vapply(specs, `[[`, character(1), "name"), collapse = ", ")))
+  de_all <- list()
+  for (i in seq_along(specs)) {
+    spec <- specs[[i]]
+    # Primary spec keeps the unsuffixed de_results.tsv / volcano.png names so the
+    # report + airway validation are unchanged; extras get a sanitised suffix.
+    suffix <- if (i == 1) "" else paste0("_", gsub("[^A-Za-z0-9]+", "_", spec$name))
+    res <- run_results(dds, spec, cfg)
+    res <- shrink_lfc(dds, spec, res, cfg$de$shrink)
+    de_df <- annotate_results(res, cfg$organism)
+    detab_i <- build_de_table(de_df, cfg, outdir, suffix = suffix)
+    plot_volcano(detab_i$table, cfg, outdir, suffix = suffix,
+                 title = sprintf("Differential expression: %s", spec$name))
+    detab_i$name <- spec$name
+    de_all[[spec$name]] <- detab_i
+  }
+  detab <- de_all[[1]]   # primary contrast (back-compatible return + report featured view)
 
   # ===========================================================================
-  # Functional enrichment (guarded)
+  # Functional enrichment (guarded) -- run on the PRIMARY contrast
   # ===========================================================================
   log_section("Functional enrichment")
   enr <- run_enrichment(detab$table, cfg, cfg$organism, outdir)
@@ -140,7 +154,7 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
     metric = c(
       "Pipeline version", "Run timestamp", "Runtime",
       "Samples", "Genes (input)", "Genes (after filter)", "Genes filtered",
-      "Significant DEGs", "DEGs up / down", "Size factors (min-max)",
+      "Test", "Contrasts", "Significant DEGs", "DEGs up / down", "Size factors (min-max)",
       "Organism", "Design", "Contrast",
       "R version", "Bioconductor", "DESeq2", "apeglm", "clusterProfiler",
       "Platform", "Host"),
@@ -149,6 +163,7 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
       sprintf("%.1f s", as.numeric(difftime(Sys.time(), t0, units = "secs"))),
       ncol(counts), flt$n_before, flt$n_after,
       sprintf("%.1f%%", 100 * (flt$n_before - flt$n_after) / flt$n_before),
+      cfg$de$test %||% "Wald", length(specs),
       detab$n_sig, sprintf("%d / %d", sum(sig & detab$table$log2FoldChange > 0, na.rm = TRUE),
                                        sum(sig & detab$table$log2FoldChange < 0, na.rm = TRUE)),
       if (all(is.na(sf))) "NA" else sprintf("%.2f - %.2f", min(sf), max(sf)),
@@ -171,5 +186,6 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
   report_path <- render_report(cfg, outdir, run_timestamp, batch_vars,
                                forced = isTRUE(qc$forced))
 
-  list(qc = qc, de = detab, dds = dds, enrichment = enr, report = report_path)
+  list(qc = qc, de = detab, de_all = de_all, specs = specs,
+       dds = dds, enrichment = enr, report = report_path)
 }

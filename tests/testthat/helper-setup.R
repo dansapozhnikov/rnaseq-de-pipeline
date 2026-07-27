@@ -13,7 +13,7 @@ if (!dir.exists(file.path(.repo_root, "R"))) {
 fixture <- function(...) file.path(.repo_root, "tests", "fixtures", ...)
 
 # Source modules under test (order matters: logging first, it defines stop_pipeline).
-for (f in c("logging.R", "config.R", "io_detect.R", "qc.R")) {
+for (f in c("logging.R", "config.R", "io_detect.R", "qc.R", "normalize.R", "de.R")) {
   p <- file.path(.repo_root, "R", f)
   if (file.exists(p)) sys.source(p, envir = globalenv())
 }

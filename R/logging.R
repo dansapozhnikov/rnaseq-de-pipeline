@@ -19,6 +19,10 @@ suppressPackageStartupMessages({
 .log_state <- new.env(parent = emptyenv())
 .log_state$file <- NULL
 
+# NULL-coalescing helper, defined here (sourced first) so every module can use it
+# regardless of source order. `a %||% b` returns `a` unless it is NULL, else `b`.
+if (!exists("%||%")) `%||%` <- function(a, b) if (is.null(a)) b else a
+
 #' Initialise the run log
 #'
 #' @param outdir Root output directory; the log is written under <outdir>/logs/.

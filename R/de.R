@@ -15,62 +15,112 @@ suppressPackageStartupMessages({
   library(apeglm)
 })
 
-#' Extract results for the requested contrast.
+# Coefficient name implied by a [factor, numerator, denominator] contrast, given
+# the denominator was set as the reference level in build_dds().
+.coef_from_contrast <- function(ct) sprintf("%s_%s_vs_%s", ct[[1]], ct[[2]], ct[[3]])
+
+#' Resolve the config into an ordered list of result specifications.
+#'
+#' @param cfg Config list.
+#' @return A list of specs; each is list(name, contrast=[f,n,d] or NULL, coef=str or NULL).
+#' The primary `de$contrast` is always first (keeps single-contrast behaviour and
+#' file names unchanged). `de$contrasts` (optional) adds more results, each either
+#' a plain [factor, numerator, denominator] vector OR a named entry with a `coef`
+#' (a resultsNames() coefficient -- how you request an INTERACTION effect) or a
+#' `contrast`. This is what lets one run emit several comparisons.
+resolve_result_specs <- function(cfg) {
+  specs <- list(list(name = .coef_from_contrast(cfg$contrast),
+                     contrast = cfg$contrast, coef = NULL))
+  extra <- cfg$de$contrasts
+  if (!is.null(extra)) {
+    for (item in extra) {
+      if (is.null(names(item))) {
+        # Plain [factor, numerator, denominator] vector.
+        specs[[length(specs) + 1]] <- list(name = .coef_from_contrast(item),
+                                            contrast = item, coef = NULL)
+      } else if (!is.null(item$coef)) {
+        nm <- if (!is.null(item$name)) item$name else item$coef
+        specs[[length(specs) + 1]] <- list(name = nm, contrast = NULL, coef = item$coef)
+      } else {
+        ct <- item$contrast
+        nm <- if (!is.null(item$name)) item$name else .coef_from_contrast(ct)
+        specs[[length(specs) + 1]] <- list(name = nm, contrast = ct, coef = NULL)
+      }
+    }
+  }
+  # De-duplicate by name, keeping first occurrence (primary wins).
+  specs[!duplicated(vapply(specs, `[[`, character(1), "name"))]
+}
+
+#' Extract results for one result spec (a contrast OR a named coefficient).
 #'
 #' @param dds Fitted DESeqDataSet.
-#' @param contrast [factor, numerator, denominator].
-#' @param cfg Config (uses de$padj_cutoff for `alpha`, which tunes independent
-#'   filtering to the significance level we actually use).
+#' @param spec A spec from resolve_result_specs().
+#' @param cfg Config (uses de$padj_cutoff for `alpha`).
 #' @return A DESeqResults object.
-run_results <- function(dds, contrast, cfg) {
-  res <- DESeq2::results(
-    dds,
-    contrast = c(contrast[[1]], contrast[[2]], contrast[[3]]),
-    alpha = cfg$de$padj_cutoff)
-  log_success(sprintf("Extracted results for %s: %s vs %s.",
-                     contrast[[1]], contrast[[2]], contrast[[3]]))
+#' NOTE on LRT: when `dds` was fit with test="LRT", results() returns the LRT
+#' p-values regardless of the contrast/name; the contrast/coef only selects which
+#' log2FoldChange to report alongside those p-values.
+run_results <- function(dds, spec, cfg) {
+  if (!is.null(spec$coef)) {
+    if (!spec$coef %in% DESeq2::resultsNames(dds)) {
+      stop_pipeline(sprintf("Requested coefficient '%s' is not in resultsNames(): %s",
+                            spec$coef, paste(DESeq2::resultsNames(dds), collapse = ", ")))
+    }
+    res <- DESeq2::results(dds, name = spec$coef, alpha = cfg$de$padj_cutoff)
+    log_success(sprintf("Extracted results for coefficient '%s'.", spec$coef))
+  } else {
+    ct <- spec$contrast
+    res <- DESeq2::results(dds, contrast = c(ct[[1]], ct[[2]], ct[[3]]),
+                           alpha = cfg$de$padj_cutoff)
+    log_success(sprintf("Extracted results for %s: %s vs %s.", ct[[1]], ct[[2]], ct[[3]]))
+  }
   res
 }
 
-#' Apply log2 fold-change shrinkage.
+#' Apply log2 fold-change shrinkage for one result spec.
 #'
 #' @param dds Fitted DESeqDataSet.
-#' @param contrast [factor, numerator, denominator].
-#' @param res The unshrunk DESeqResults (used as fallback / for ashr baseline).
+#' @param spec A spec from resolve_result_specs().
+#' @param res The unshrunk DESeqResults.
 #' @param method One of "apeglm","ashr","normal","none".
 #' @return A DESeqResults object with shrunk log2FoldChange (or `res` if none).
-#' apeglm shrinks a single coefficient and needs the coef NAME, not a contrast.
-#' Because build_dds() set the denominator as the reference level, that coef is
-#' "<factor>_<numerator>_vs_<denominator>". If it is not present (e.g. an
-#' interaction design), we fall back to ashr, which accepts an explicit contrast.
-shrink_lfc <- function(dds, contrast, res, method = "apeglm") {
+#' apeglm shrinks a single coefficient by NAME, so it is the natural choice for
+#' both contrasts (coef derived from the reference level) and interaction coefs.
+#' ashr/normal need an explicit contrast; a coef-only spec (interaction) therefore
+#' cannot use them and is returned unshrunk with a warning.
+shrink_lfc <- function(dds, spec, res, method = "apeglm") {
   if (identical(method, "none")) {
     log_info("LFC shrinkage disabled (de$shrink: none).")
     return(res)
   }
-  factor <- contrast[[1]]; num <- contrast[[2]]; denom <- contrast[[3]]
-  coef_name <- sprintf("%s_%s_vs_%s", factor, num, denom)
+  coef_name <- if (!is.null(spec$coef)) spec$coef else .coef_from_contrast(spec$contrast)
 
   if (method == "apeglm") {
     if (coef_name %in% DESeq2::resultsNames(dds)) {
       log_info(sprintf("Shrinking LFCs with apeglm (coef '%s').", coef_name))
       return(DESeq2::lfcShrink(dds, coef = coef_name, type = "apeglm", res = res))
     }
-    log_warn(sprintf(paste0("apeglm needs coef '%s' which is not in resultsNames(); ",
-                            "falling back to ashr (supports arbitrary contrasts)."), coef_name))
+    log_warn(sprintf("apeglm needs coef '%s' (not in resultsNames()); trying ashr.", coef_name))
     method <- "ashr"
   }
+  # ashr/normal require a contrast vector; interaction (coef-only) specs can't use them.
+  if (is.null(spec$contrast)) {
+    log_warn(sprintf("Cannot apply '%s' shrinkage to coefficient-only spec '%s'; returning unshrunk LFCs.",
+                     method, spec$name))
+    return(res)
+  }
+  ct <- spec$contrast
   if (method == "ashr") {
     if (!requireNamespace("ashr", quietly = TRUE)) {
       log_warn("ashr not installed; falling back to 'normal' shrinkage.")
       method <- "normal"
     } else {
-      return(DESeq2::lfcShrink(dds, contrast = c(factor, num, denom), type = "ashr", res = res))
+      return(DESeq2::lfcShrink(dds, contrast = c(ct[[1]], ct[[2]], ct[[3]]), type = "ashr", res = res))
     }
   }
-  # 'normal' shrinkage supports contrasts and ships with DESeq2.
   log_info("Shrinking LFCs with 'normal' estimator.")
-  DESeq2::lfcShrink(dds, contrast = c(factor, num, denom), type = "normal", res = res)
+  DESeq2::lfcShrink(dds, contrast = c(ct[[1]], ct[[2]], ct[[3]]), type = "normal", res = res)
 }
 
 #' Annotate result rows with gene SYMBOL and ENTREZ id via the organism OrgDb.
@@ -115,8 +165,10 @@ annotate_results <- function(res, organism) {
 #' @param df Annotated results data.frame.
 #' @param cfg Config (padj_cutoff, lfc_cutoff).
 #' @param outdir Output root; TSV written under <outdir>/tables/.
+#' @param suffix Optional filename suffix (e.g. "_myContrast") so multiple
+#'   contrasts write to distinct files; "" keeps the primary de_results.tsv name.
 #' @return list(table = df with `significant` flag, path = tsv path, n_sig = int).
-build_de_table <- function(df, cfg, outdir) {
+build_de_table <- function(df, cfg, outdir, suffix = "") {
   # A gene is "significant" when it clears BOTH the statistical (adjusted p) and
   # the effect-size (|log2FC|) thresholds. WHY both: statistical significance
   # alone can flag tiny, biologically irrelevant changes in high-power designs.
@@ -134,7 +186,7 @@ build_de_table <- function(df, cfg, outdir) {
 
   tables_dir <- file.path(outdir, "tables")
   dir.create(tables_dir, recursive = TRUE, showWarnings = FALSE)
-  path <- file.path(tables_dir, "de_results.tsv")
+  path <- file.path(tables_dir, sprintf("de_results%s.tsv", suffix))
   utils::write.table(df, path, sep = "\t", quote = FALSE, row.names = FALSE)
 
   n_sig <- sum(df$significant, na.rm = TRUE)
@@ -148,18 +200,20 @@ build_de_table <- function(df, cfg, outdir) {
 #' @param df DE table (with log2FoldChange, padj, symbol).
 #' @param cfg Config (thresholds define the guide lines).
 #' @param outdir Output root; PNG under <outdir>/plots/.
+#' @param suffix Optional filename suffix for multi-contrast runs ("" = volcano.png).
+#' @param title Plot title (defaults to "Differential expression").
 #' @return Path to the PNG.
-plot_volcano <- function(df, cfg, outdir) {
+plot_volcano <- function(df, cfg, outdir, suffix = "", title = "Differential expression") {
   plots_dir <- file.path(outdir, "plots")
   dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
-  path <- file.path(plots_dir, "volcano.png")
+  path <- file.path(plots_dir, sprintf("volcano%s.png", suffix))
   labs_vec <- ifelse(is.na(df$symbol) | df$symbol == "", df$gene_id, df$symbol)
 
   ok <- tryCatch({
     p <- EnhancedVolcano::EnhancedVolcano(
       df, lab = labs_vec, x = "log2FoldChange", y = "padj",
       pCutoff = cfg$de$padj_cutoff, FCcutoff = cfg$de$lfc_cutoff,
-      title = "Differential expression", subtitle = NULL,
+      title = title, subtitle = NULL,
       ylab = bquote(~-Log[10] ~ italic(padj)))
     ggplot2::ggsave(path, p, width = 8, height = 7, dpi = 150)
     TRUE
