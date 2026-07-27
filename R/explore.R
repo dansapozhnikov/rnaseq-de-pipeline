@@ -1,0 +1,118 @@
+# =============================================================================
+# R/explore.R — exploratory analysis: PCA + variance-vs-metadata association
+# -----------------------------------------------------------------------------
+# One concern: unsupervised views that answer "does the data cluster the way the
+# biology says it should, and is any technical variable (batch) driving the
+# major axes of variation?" Both plots are saved as PNGs for the HTML report.
+# =============================================================================
+
+suppressPackageStartupMessages({
+  library(ggplot2)
+  library(matrixStats)
+})
+
+#' Compute a PCA on the most variable genes of a VST matrix.
+#'
+#' @param vsd A DESeqTransform (from get_vst()).
+#' @param ntop Number of top-variance genes to use (default 500).
+#' @return list(pca = prcomp object, percentVar = variance % per PC, scores = df).
+#' WHY top-variance genes: PCA on all genes is dominated by noise from the long
+#' tail of low-variance genes; restricting to the most variable genes surfaces
+#' the structure (treatment, batch) that actually separates samples.
+compute_pca <- function(vsd, ntop = 500) {
+  mat <- SummarizedExperiment::assay(vsd)
+  vars <- matrixStats::rowVars(mat)
+  ntop <- min(ntop, nrow(mat))
+  top <- order(vars, decreasing = TRUE)[seq_len(ntop)]
+  pca <- stats::prcomp(t(mat[top, , drop = FALSE]), center = TRUE, scale. = FALSE)
+  percent <- round(100 * pca$sdev^2 / sum(pca$sdev^2), 1)
+  scores <- as.data.frame(pca$x)
+  scores$sample <- rownames(scores)
+  list(pca = pca, percentVar = percent, scores = scores)
+}
+
+#' Draw and save a PC1-vs-PC2 scatter colored by the tested factor.
+#'
+#' @param pca_res Output of compute_pca().
+#' @param metadata Sample sheet (row-aligned to samples).
+#' @param color_by Factor mapped to color (usually the tested variable).
+#' @param shape_by Optional factor mapped to shape (usually batch).
+#' @param outdir Output root; the plot is written under <outdir>/plots/.
+#' @return Path to the saved PNG.
+plot_pca <- function(pca_res, metadata, color_by, shape_by = NULL, outdir) {
+  df <- pca_res$scores
+  # Bind metadata columns (avoid clobbering the existing 'sample' column).
+  md <- metadata[match(df$sample, rownames(metadata)), , drop = FALSE]
+  md <- md[, setdiff(colnames(md), colnames(df)), drop = FALSE]
+  df <- cbind(df, md)
+  pv <- pca_res$percentVar
+
+  # Build the aesthetic with the .data pronoun so column names come from strings
+  # robustly across ggplot2 versions (2.x tidy-eval and 4.x alike).
+  mapping <- aes(x = .data[["PC1"]], y = .data[["PC2"]], color = .data[[color_by]])
+  if (!is.null(shape_by) && shape_by %in% colnames(df)) {
+    mapping <- aes(x = .data[["PC1"]], y = .data[["PC2"]],
+                   color = .data[[color_by]], shape = .data[[shape_by]])
+  }
+
+  p <- ggplot(df, mapping) +
+    geom_point(size = 4, alpha = 0.9) +
+    labs(x = sprintf("PC1: %s%% variance", pv[1]),
+         y = sprintf("PC2: %s%% variance", pv[2]),
+         title = "PCA of variance-stabilized counts (top 500 variable genes)") +
+    theme_bw(base_size = 13)
+
+  plots_dir <- file.path(outdir, "plots")
+  dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
+  path <- file.path(plots_dir, "pca.png")
+  ggplot2::ggsave(path, p, width = 7, height = 5.5, dpi = 150)
+  log_success(sprintf("PCA plot saved to %s", path))
+  path
+}
+
+#' Associate each principal component with each metadata variable.
+#'
+#' @param pca_res Output of compute_pca().
+#' @param metadata Sample sheet.
+#' @param npc Number of leading PCs to test (default 5).
+#' @param outdir Output root.
+#' @return list(assoc = matrix of R^2 [PC x variable], plot = png path, table = tsv path).
+#' For every (PC, variable) pair we fit PC ~ variable and record the R^2, i.e.
+#' the fraction of that PC's spread explained by the variable. WHY: this is the
+#' quantitative batch-effect diagnostic — if a technical variable explains most
+#' of PC1, the major axis of variation is technical, not biological.
+variance_vs_metadata <- function(pca_res, metadata, npc = 5, outdir) {
+  scores <- pca_res$scores
+  npc <- min(npc, sum(grepl("^PC", colnames(scores))))
+  pcs <- paste0("PC", seq_len(npc))
+  md <- metadata[match(scores$sample, rownames(metadata)), , drop = FALSE]
+  # Only test variables with >1 level (constants explain nothing).
+  vars <- colnames(md)[vapply(md, function(x) length(unique(x)) > 1, logical(1))]
+  vars <- setdiff(vars, "sample")
+
+  assoc <- matrix(NA_real_, nrow = length(pcs), ncol = length(vars),
+                  dimnames = list(pcs, vars))
+  for (pc in pcs) for (v in vars) {
+    fit <- stats::lm(scores[[pc]] ~ factor(md[[v]]))
+    assoc[pc, v] <- summary(fit)$r.squared
+  }
+
+  plots_dir <- file.path(outdir, "plots")
+  dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
+  tbl_path <- file.path(outdir, "qc", "variance_vs_metadata.tsv")
+  dir.create(dirname(tbl_path), recursive = TRUE, showWarnings = FALSE)
+  utils::write.table(round(assoc, 3), tbl_path, sep = "\t", quote = FALSE, col.names = NA)
+
+  png_path <- file.path(plots_dir, "variance_vs_metadata.png")
+  # A heatmap of R^2; pheatmap handles the single-row/col edge cases of tiny data.
+  if (length(vars) >= 1) {
+    pheatmap::pheatmap(
+      assoc, cluster_rows = FALSE, cluster_cols = FALSE,
+      display_numbers = TRUE, number_format = "%.2f",
+      color = grDevices::colorRampPalette(c("white", "firebrick"))(100),
+      main = "Variance explained (R^2) of each PC by each metadata variable",
+      filename = png_path, width = 6, height = 4)
+  }
+  log_success(sprintf("Variance-vs-metadata written to %s and %s", tbl_path, png_path))
+  list(assoc = assoc, plot = png_path, table = tbl_path)
+}
