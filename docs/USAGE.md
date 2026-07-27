@@ -65,6 +65,28 @@ conda activate rnaseq-de
 `environment.yml` mirrors the same Bioconductor 3.18 stack. `renv.lock` remains
 the source of truth for exact reproducibility.
 
+### Option C — Docker / Apptainer (most portable; recommended for HPC)
+
+Build (or pull the CI-published image), then run the pipeline inside it — no local
+R/Bioconductor install needed:
+
+```bash
+# Docker
+docker build -t rnaseq-de-pipeline .
+docker run --rm -v "$PWD/data:/data" -v "$PWD/out:/out" rnaseq-de-pipeline \
+  --counts /data/counts.csv --metadata /data/samples.csv \
+  --config config/config.example.yaml --outdir /out
+
+# Apptainer / Singularity on HPC (no X11 needed — plots auto-use Cairo)
+apptainer pull docker://ghcr.io/dansapozhnikov/rnaseq-de-pipeline:latest
+apptainer run --bind "$PWD/data:/data,$PWD/out:/out" rnaseq-de-pipeline_latest.sif \
+  --counts /data/counts.csv --metadata /data/samples.csv \
+  --config /pipeline/config/config.example.yaml --outdir /out
+```
+
+The image is built on `bioconductor/bioconductor_docker:RELEASE_3_18`, so the
+whole stack (and pandoc) is baked in and deterministic for a given base digest.
+
 ### Core packages
 
 `DESeq2`, `apeglm` (LFC shrinkage), `limma` (batch-effect viz), `tximport`

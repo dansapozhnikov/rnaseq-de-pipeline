@@ -1,0 +1,29 @@
+# =============================================================================
+# Apptainer / Singularity definition for HPC use.
+# -----------------------------------------------------------------------------
+# Bootstraps from the published Docker image (built + pushed by CI to GHCR), so
+# there is no duplicated install logic and the .sif is byte-for-byte the same
+# stack as the Docker image. This is the recommended HPC pattern.
+#
+# Build a portable image:   apptainer build rnaseq-de.sif apptainer.def
+# Or pull the image directly (no def file needed):
+#                           apptainer pull docker://ghcr.io/dansapozhnikov/rnaseq-de-pipeline:latest
+# Run (bind your data/outputs; HPC has no X11 -- the pipeline auto-uses Cairo):
+#   apptainer run --bind $PWD/data:/data,$PWD/out:/out rnaseq-de.sif \
+#       --counts /data/counts.csv --metadata /data/samples.csv \
+#       --config /pipeline/config/config.example.yaml --outdir /out
+#   apptainer run rnaseq-de.sif --validate --config /pipeline/config/config.example.yaml --outdir /out
+# =============================================================================
+Bootstrap: docker
+From: ghcr.io/dansapozhnikov/rnaseq-de-pipeline:latest
+
+%labels
+    Maintainer dansapozhnikov
+    Description Reproducible bulk RNA-seq differential-expression pipeline (R/DESeq2)
+
+%runscript
+    exec Rscript /pipeline/run_pipeline.R "$@"
+
+%help
+    Bulk RNA-seq DE pipeline. Pass the same flags as run_pipeline.R, e.g.
+    `apptainer run rnaseq-de.sif --validate --config /pipeline/config/config.example.yaml --outdir /out`.

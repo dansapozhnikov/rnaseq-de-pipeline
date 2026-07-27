@@ -1,0 +1,14 @@
+# Keep the build context small and the image clean.
+.git
+.github
+results/
+data/
+renv/library/
+renv/local/
+renv/staging/
+*.log
+examples/            # large committed demo output; not needed inside the image
+Rplots.pdf
+.DS_Store
+.Rhistory
+.RData
