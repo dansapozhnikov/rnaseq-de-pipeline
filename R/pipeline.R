@@ -1,10 +1,10 @@
 # =============================================================================
-# R/pipeline.R — the end-to-end orchestration of a single analysis
+# R/pipeline.R -- the end-to-end orchestration of a single analysis
 # -----------------------------------------------------------------------------
 # One concern: given a raw count matrix + metadata + resolved config, run every
 # stage in order and produce all artifacts. Shared by real runs (run_pipeline.R)
 # and the airway self-test (tests/validate_airway.R) so both exercise the SAME
-# code path — the validation genuinely tests what users run.
+# code path -- the validation genuinely tests what users run.
 #
 # Stage order mirrors docs/pipeline.svg:
 #   reconcile -> QC (pre-model) -> GATE -> filter -> DESeq -> VST
@@ -22,7 +22,7 @@
 #' @param sample_col Metadata column holding sample IDs (default "sample").
 #' @param tx2gene Unused here (kept for signature symmetry with loaders).
 #' @param force If TRUE, downgrade QC FAIL -> WARN and continue.
-#' @return list(qc, de, dds, report) — used by the airway validation to assert.
+#' @return list(qc, de, dds, report) -- used by the airway validation to assert.
 run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
                               sample_col = "sample", tx2gene = NULL, force = FALSE,
                               pipeline_version = "dev") {
@@ -31,13 +31,22 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
   tested <- cfg$contrast[[1]]
   t0 <- Sys.time()   # wall-clock start, for the run-metrics panel
 
+  # Headless-safe plotting on Linux/HPC. WHY: on Linux compute nodes without an
+  # X11 display the default bitmap device can fail when saving PNGs; the Cairo
+  # device renders off-screen. We scope this to Linux ONLY: macOS already renders
+  # headless via its native 'quartz' device (and its cairo build may depend on an
+  # absent X11), and Windows uses its own device -- forcing cairo there would hurt.
+  if (Sys.info()[["sysname"]] == "Linux" && isTRUE(capabilities("cairo"))) {
+    options(bitmapType = "cairo")
+  }
+
   # --- Align counts <-> metadata (identity-checked; FAIL on mismatch) --------
   counts <- reconcile_samples(counts, metadata, sample_col)
   rownames(metadata) <- as.character(metadata[[sample_col]])
   metadata <- metadata[colnames(counts), , drop = FALSE]
 
   # ===========================================================================
-  # QC — pre-model checks (the ones that can FAIL and stop the run)
+  # QC -- pre-model checks (the ones that can FAIL and stop the run)
   # ===========================================================================
   log_section("Quality control (pre-model)")
   qc <- qc_init()
@@ -114,7 +123,7 @@ run_pipeline_core <- function(counts, metadata, cfg, outdir, run_timestamp,
   # ===========================================================================
   # Run metrics & environment provenance
   # ===========================================================================
-  # WHY: a report should be self-describing — anyone reading it later can see how
+  # WHY: a report should be self-describing -- anyone reading it later can see how
   # long it took, which pipeline version + package versions produced it, and the
   # headline counts, without digging through the log. Written as a 2-column TSV
   # the report renders verbatim.

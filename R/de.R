@@ -1,5 +1,5 @@
 # =============================================================================
-# R/de.R — differential expression: results, LFC shrinkage, annotation, outputs
+# R/de.R -- differential expression: results, LFC shrinkage, annotation, outputs
 # -----------------------------------------------------------------------------
 # One concern: turn a fitted DESeqDataSet into an annotated, thresholded,
 # shrinkage-stabilized DE table plus a volcano plot.
@@ -79,7 +79,7 @@ shrink_lfc <- function(dds, contrast, res, method = "apeglm") {
 #' @param organism "human" or "mouse".
 #' @return data.frame of results with added gene_id, symbol, entrez columns.
 #' GUARDED: if the OrgDb is missing, we WARN and return the table with NA symbol
-#' columns rather than crashing — annotation is a convenience, not a correctness
+#' columns rather than crashing -- annotation is a convenience, not a correctness
 #' requirement of the DE call itself.
 annotate_results <- function(res, organism) {
   df <- as.data.frame(res)

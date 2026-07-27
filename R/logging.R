@@ -1,5 +1,5 @@
 # =============================================================================
-# R/logging.R — structured, colored, tee'd logging + severity helpers
+# R/logging.R -- structured, colored, tee'd logging + severity helpers
 # -----------------------------------------------------------------------------
 # One concern: everything the pipeline says to the human. Messages are
 # timestamped, written with a severity level, printed to the console in COLOR
@@ -116,7 +116,7 @@ get_pipeline_version <- function(project_root = ".") {
 }
 
 #' Record the full session (package versions, R build, platform) to the log.
-#' WHY: reproducibility — sessionInfo() is the ground-truth manifest of what
+#' WHY: reproducibility -- sessionInfo() is the ground-truth manifest of what
 #' actually ran, complementing renv.lock. Called at the very end of a run.
 log_session_info <- function() {
   if (is.null(.log_state$file)) return(invisible())

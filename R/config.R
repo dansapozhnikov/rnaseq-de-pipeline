@@ -1,5 +1,5 @@
 # =============================================================================
-# R/config.R — load, validate, and echo the YAML configuration
+# R/config.R -- load, validate, and echo the YAML configuration
 # -----------------------------------------------------------------------------
 # One concern: turn a config.yaml file into a validated R list, fail early and
 # clearly on anything missing or malformed, and echo every resolved value so the
@@ -88,7 +88,7 @@ load_config <- function(path) {
 #'
 #' @param cfg A config list from load_config().
 #' Prints every parameter the run will use. WHY: the log becomes a self-contained
-#' record — anyone reading it can see exactly how the run was parameterised
+#' record -- anyone reading it can see exactly how the run was parameterised
 #' without needing the original YAML.
 echo_config <- function(cfg) {
   log_section("Resolved configuration")

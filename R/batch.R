@@ -1,11 +1,11 @@
 # =============================================================================
-# R/batch.R — batch/confounding handling
+# R/batch.R -- batch/confounding handling
 # -----------------------------------------------------------------------------
 # One concern: (1) identify the nuisance (batch) variables in the design, and
 # (2) produce a batch-corrected matrix FOR VISUALIZATION ONLY.
 #
 # CRITICAL distinction: batch is handled for DIFFERENTIAL EXPRESSION by INCLUDING
-# it in the DESeq2 design (e.g. ~ batch + condition) — DESeq2 regresses it out
+# it in the DESeq2 design (e.g. ~ batch + condition) -- DESeq2 regresses it out
 # inside the GLM. We do NOT feed batch-corrected values to DESeq2. limma's
 # removeBatchEffect is used purely to make PCA/heatmaps show the biological
 # structure after nuisance variation is visually subtracted. Using corrected

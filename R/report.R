@@ -1,5 +1,5 @@
 # =============================================================================
-# R/report.R — assemble the self-contained HTML report
+# R/report.R -- assemble the self-contained HTML report
 # -----------------------------------------------------------------------------
 # One concern: render report/report_template.Rmd against a finished run's output
 # directory, passing the parameters the template needs. The template reads the
@@ -17,7 +17,7 @@
 #' @param template Path to the Rmd template (defaults to report/report_template.Rmd).
 #' @return Path to the rendered HTML (invisibly), or NULL on failure (WARN).
 #' Rendering is wrapped so a report hiccup never masks an otherwise-successful
-#' analysis — the tables and plots are already on disk regardless.
+#' analysis -- the tables and plots are already on disk regardless.
 render_report <- function(cfg, outdir, run_timestamp, batch_vars = character(0),
                           forced = FALSE, template = NULL) {
   if (!requireNamespace("rmarkdown", quietly = TRUE)) {

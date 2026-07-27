@@ -1,5 +1,5 @@
 # =============================================================================
-# R/explore.R — exploratory analysis: PCA + variance-vs-metadata association
+# R/explore.R -- exploratory analysis: PCA + variance-vs-metadata association
 # -----------------------------------------------------------------------------
 # One concern: unsupervised views that answer "does the data cluster the way the
 # biology says it should, and is any technical variable (batch) driving the
@@ -95,7 +95,7 @@ plot_pca <- function(pca_res, metadata, color_by, shape_by = NULL, outdir,
 #' @return list(assoc = matrix of R^2 [PC x variable], plot = png path, table = tsv path).
 #' For every (PC, variable) pair we fit PC ~ variable and record the R^2, i.e.
 #' the fraction of that PC's spread explained by the variable. WHY: this is the
-#' quantitative batch-effect diagnostic — if a technical variable explains most
+#' quantitative batch-effect diagnostic -- if a technical variable explains most
 #' of PC1, the major axis of variation is technical, not biological.
 variance_vs_metadata <- function(pca_res, metadata, npc = 5, outdir) {
   scores <- pca_res$scores

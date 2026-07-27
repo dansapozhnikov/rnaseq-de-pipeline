@@ -1,5 +1,5 @@
 # =============================================================================
-# R/qc.R — the loud PASS / WARN / FAIL quality-control engine
+# R/qc.R -- the loud PASS / WARN / FAIL quality-control engine
 # -----------------------------------------------------------------------------
 # One concern: run configurable QC checks, record each with a severity, print
 # them to the console in COLOR as they happen, draw a boxed summary banner that
@@ -69,7 +69,7 @@ qc_check <- function(qc, name, severity, condition, message = "", value = "") {
 # Individual checks (thresholds come from config; no magic numbers here)
 # ---------------------------------------------------------------------------
 
-#' Check 1 — count columns line up with metadata rows (count only, not identity;
+#' Check 1 -- count columns line up with metadata rows (count only, not identity;
 #' identity is enforced separately by reconcile_samples()).
 qc_check_sample_alignment <- function(qc, counts, metadata) {
   n_c <- ncol(counts); n_m <- nrow(metadata)
@@ -78,7 +78,7 @@ qc_check_sample_alignment <- function(qc, counts, metadata) {
            value = sprintf("%d vs %d", n_c, n_m))
 }
 
-#' Check 2 — raw-count sanity: integer and non-negative. The loaders already
+#' Check 2 -- raw-count sanity: integer and non-negative. The loaders already
 #' enforce this, so a PASS here is a belt-and-braces confirmation for the report.
 qc_check_raw_counts <- function(qc, counts) {
   ok <- is.integer(counts) && !any(counts < 0)
@@ -87,7 +87,7 @@ qc_check_raw_counts <- function(qc, counts) {
            value = if (ok) "integer, non-negative" else "NON-INTEGER/NEGATIVE")
 }
 
-#' Check 3 — per-sample library size. WARN below min, FAIL below the hard floor.
+#' Check 3 -- per-sample library size. WARN below min, FAIL below the hard floor.
 qc_check_library_size <- function(qc, counts, cfg) {
   libsize <- colSums(counts)
   worst <- min(libsize)
@@ -107,7 +107,7 @@ qc_check_library_size <- function(qc, counts, cfg) {
            value = sprintf("min=%s", format(worst, big.mark=",")))
 }
 
-#' Check 4 — genes detected (count > 0) per sample. WARN if any sample is low.
+#' Check 4 -- genes detected (count > 0) per sample. WARN if any sample is low.
 qc_check_genes_detected <- function(qc, counts, cfg) {
   detected <- colSums(counts > 0)
   worst <- min(detected)
@@ -119,7 +119,7 @@ qc_check_genes_detected <- function(qc, counts, cfg) {
            value = sprintf("min=%d", worst))
 }
 
-#' Check 5 — replicates per group in the TESTED factor (last term of the design).
+#' Check 5 -- replicates per group in the TESTED factor (last term of the design).
 #' FAIL if any group has fewer than the configured minimum: DE with <2 replicates
 #' per group cannot estimate within-group dispersion.
 qc_check_replicates <- function(qc, metadata, tested_factor, cfg) {
@@ -138,7 +138,7 @@ qc_check_replicates <- function(qc, metadata, tested_factor, cfg) {
            value = sprintf("min group n=%d", worst))
 }
 
-#' Check 6 — design identifiability. Build the model matrix and check it is full
+#' Check 6 -- design identifiability. Build the model matrix and check it is full
 #' rank. A rank-deficient matrix means a covariate is confounded with the tested
 #' variable (e.g. every treated sample is batch B) and DESeq2 cannot separate
 #' their effects. On FAIL we print the offending cross-tabulation.
@@ -173,7 +173,7 @@ qc_check_design_identifiable <- function(qc, metadata, design_str, tested_factor
            value = sprintf("rank %d / %d cols", qr(mm)$rank, ncol(mm)))
 }
 
-#' Check 7 — low-count gene filter report. WARN if the filter removes more than
+#' Check 7 -- low-count gene filter report. WARN if the filter removes more than
 #' the configured percentage of genes (a huge fraction removed can signal a
 #' shallow library or a mismatched annotation).
 qc_check_low_count_filter <- function(qc, n_before, n_after, cfg) {
@@ -185,7 +185,7 @@ qc_check_low_count_filter <- function(qc, n_before, n_after, cfg) {
            value = sprintf("%d -> %d genes (%.1f%% removed)", n_before, n_after, pct))
 }
 
-#' Check 8 — dispersion-fit sanity (post-DESeq). WARN if the fitted gene-wise
+#' Check 8 -- dispersion-fit sanity (post-DESeq). WARN if the fitted gene-wise
 #' dispersions look abnormal (all near-zero, or an implausibly large median),
 #' which usually indicates too few replicates or a mis-specified design.
 qc_check_dispersion <- function(qc, dds) {
@@ -198,7 +198,7 @@ qc_check_dispersion <- function(qc, dds) {
            value = sprintf("median disp=%.4g", med))
 }
 
-#' Check 9 — outlier flag from Cook's distance (post-DESeq). WARN and LIST the
+#' Check 9 -- outlier flag from Cook's distance (post-DESeq). WARN and LIST the
 #' candidate samples. We do NOT auto-remove; dropping samples requires explicit
 #' opt-in (documented in USAGE), because silent removal changes the model.
 qc_check_cooks_outliers <- function(qc, dds, cfg) {

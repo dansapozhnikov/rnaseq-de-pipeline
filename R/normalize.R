@@ -1,5 +1,5 @@
 # =============================================================================
-# R/normalize.R — build the DESeq2 object, filter, normalize, transform
+# R/normalize.R -- build the DESeq2 object, filter, normalize, transform
 # -----------------------------------------------------------------------------
 # One concern: everything from a raw integer count matrix + metadata to a fitted
 # DESeqDataSet plus a variance-stabilized matrix for visualization.

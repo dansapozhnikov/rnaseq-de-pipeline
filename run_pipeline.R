@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# run_pipeline.R — command-line orchestrator
+# run_pipeline.R -- command-line orchestrator
 # -----------------------------------------------------------------------------
 # Parses CLI arguments, loads config + counts (or the airway self-test), runs the
 # shared core, captures sessionInfo(), and exits non-zero on any QC FAIL or on a

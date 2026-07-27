@@ -1,5 +1,5 @@
 # =============================================================================
-# R/io_detect.R — input-format detection + loaders for the common bulk formats
+# R/io_detect.R -- input-format detection + loaders for the common bulk formats
 # -----------------------------------------------------------------------------
 # One concern: turn whatever the user points --counts at (a file or a directory)
 # into a clean integer count matrix (genes x samples) plus optional feature
@@ -138,7 +138,7 @@ detect_format <- function(path) {
 }
 
 # ---------------------------------------------------------------------------
-# Loaders (one per format) — each returns list(counts, feature_meta)
+# Loaders (one per format) -- each returns list(counts, feature_meta)
 # ---------------------------------------------------------------------------
 
 #' Load a plain count matrix (CSV/TSV): first column = gene IDs, rest numeric.
@@ -321,7 +321,7 @@ load_counts <- function(path, input_format = "auto", tx2gene = NULL, star_strand
 #' @return Count matrix with columns reordered to match metadata row order.
 #' FAILS loudly and prints the offending IDs (setdiff BOTH directions) on any
 #' mismatch. WHY: silently intersecting samples is a classic source of wrong
-#' results — a dropped sample changes the model. Better to stop and show the IDs.
+#' results -- a dropped sample changes the model. Better to stop and show the IDs.
 reconcile_samples <- function(counts, metadata, sample_col) {
   if (!sample_col %in% colnames(metadata)) {
     stop_pipeline(sprintf("Sample sheet has no '%s' column.", sample_col))

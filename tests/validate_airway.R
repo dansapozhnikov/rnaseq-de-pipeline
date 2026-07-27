@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# tests/validate_airway.R — positive-control self-test on the Bioconductor
+# tests/validate_airway.R -- positive-control self-test on the Bioconductor
 # `airway` dataset (dexamethasone-treated airway smooth-muscle cells).
 # -----------------------------------------------------------------------------
 # WHY this exists: `airway` has a well-characterised glucocorticoid response, so

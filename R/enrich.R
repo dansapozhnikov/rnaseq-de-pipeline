@@ -1,5 +1,5 @@
 # =============================================================================
-# R/enrich.R — functional enrichment (ORA + GSEA), fully guarded
+# R/enrich.R -- functional enrichment (ORA + GSEA), fully guarded
 # -----------------------------------------------------------------------------
 # One concern: given the DE table, ask which GO biological processes are
 # over-represented among the significant genes (ORA) and which are coordinately
@@ -7,7 +7,7 @@
 #
 # GUARDING PRINCIPLE: enrichment is the LAST, most fragile step (needs an OrgDb,
 # enough mapped genes, non-degenerate statistics). Every failure mode here must
-# WARN and return gracefully — never abort a run that already produced valid DE
+# WARN and return gracefully -- never abort a run that already produced valid DE
 # results. A missing OrgDb, zero significant genes, or a solver hiccup all yield
 # a logged warning and NULL, not a crash.
 # =============================================================================
@@ -19,7 +19,7 @@
 #' @param cfg Config (enrichment$enable, $ontology, $padj_cutoff).
 #' @param organism "human" or "mouse".
 #' @param outdir Output root; tables under <outdir>/tables/, plot under /plots/.
-#' @return list(ora, gsea, ora_path, gsea_path, dotplot) — any element may be NULL.
+#' @return list(ora, gsea, ora_path, gsea_path, dotplot) -- any element may be NULL.
 run_enrichment <- function(de_table, cfg, organism, outdir) {
   null_result <- list(ora = NULL, gsea = NULL, ora_path = NULL,
                       gsea_path = NULL, dotplot = NULL)
@@ -51,7 +51,7 @@ run_enrichment <- function(de_table, cfg, organism, outdir) {
   }
 
   # ---------------------------------------------------------------------------
-  # (1) ORA — over-representation of GO terms among significant genes.
+  # (1) ORA -- over-representation of GO terms among significant genes.
   # ---------------------------------------------------------------------------
   sig_entrez <- unique(stats::na.omit(as.character(de_table$entrez[de_table$significant])))
   ora <- NULL; ora_path <- NULL
@@ -75,7 +75,7 @@ run_enrichment <- function(de_table, cfg, organism, outdir) {
   }
 
   # ---------------------------------------------------------------------------
-  # (2) GSEA — coordinated shifts across the full ranked gene list.
+  # (2) GSEA -- coordinated shifts across the full ranked gene list.
   # Rank by the Wald statistic (sign = direction, magnitude = confidence).
   # ---------------------------------------------------------------------------
   gsea <- NULL; gsea_path <- NULL
